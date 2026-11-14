@@ -6,13 +6,17 @@
  * (`driver.center(); driver.reach(45);`). It is test support only and is never
  * imported by application code.
  *
- * Key exports: `EngineDriver`, `runScriptedSession`.
+ * Key exports: `EngineDriver`, `runScriptedSession`, `taskResultFrom`,
+ * `scriptedSessionRecord`.
  */
 
 import { unitFromAngleDeg } from './geometry';
 import { TrialEngine, type EngineConfig, type EngineTrial } from './engine';
+import { assignPreset } from './assignment';
 import type { PresetConfig } from './presets';
+import { buildSessionRecord, type SessionRecord } from './record';
 import type { TrialSpec } from './schedule';
+import { createSessionPlan, type TaskResult } from './session';
 
 const FRAME_MS = 16;
 
@@ -103,6 +107,54 @@ export class EngineDriver<T extends EngineTrial = EngineTrial> {
     this.reach(handAngleDeg, options);
     this.finishFeedback();
   }
+}
+
+/** Wrap a finished engine's output in a `TaskResult`, with placeholder environment details. */
+export function taskResultFrom(engine: TrialEngine<TrialSpec>, startedMs: number, endedMs: number): TaskResult {
+  return {
+    records: engine.getRecords(),
+    interruptions: engine.getInterruptions(),
+    practice: { included: true, reachesCompleted: 6, attempts: 6 },
+    timing: {
+      taskStartedMs: startedMs - 30000,
+      practiceEndedMs: startedMs - 5000,
+      experimentStartedMs: startedMs,
+      experimentEndedMs: endedMs,
+    },
+    environment: {
+      userAgent: 'test-agent',
+      language: 'en-US',
+      viewport: { width: 1366, height: 700 },
+      screen: { width: 1920, height: 1080 },
+      devicePixelRatio: 1,
+      displayScale: 1,
+      moveEventSource: 'pointermove',
+      moveEvents: 100,
+      moveSamples: 400,
+      frameIntervalMs: 16.7,
+    },
+  };
+}
+
+/**
+ * A complete SessionRecord produced by a scripted participant.
+ * @param linkCode     'k7m2' (sudden), 'p4x9' (gradual) or 'demo'
+ * @param aimOffsetDeg hand direction relative to the target on each trial
+ */
+export function scriptedSessionRecord(
+  linkCode: string,
+  aimOffsetDeg: (trial: TrialSpec) => number,
+  seed = 77,
+): SessionRecord {
+  const plan = createSessionPlan({
+    assignment: assignPreset(linkCode, () => 0),
+    seed,
+    sessionId: 'scripted-session',
+    previousPresetIds: [],
+    now: new Date('2026-11-14T15:30:00.000Z'),
+  });
+  const { engine, driver } = runScriptedSession(plan.preset, plan.schedule, aimOffsetDeg);
+  return buildSessionRecord(plan, taskResultFrom(engine, 1000, driver.t), null);
 }
 
 export function engineConfigFor(preset: PresetConfig, repeatOnTimeout = false): EngineConfig {

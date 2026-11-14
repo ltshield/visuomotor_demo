@@ -14,20 +14,22 @@ import {
   readSeedOverride,
   type Assignment,
 } from './core/assignment';
-import { QUICK_DEMO_45_V1 } from './core/presets';
+import { QUICK_DEMO_45_V1, otherCanonicalPreset } from './core/presets';
+import { buildSessionRecord, withReflection, type SessionRecord } from './core/record';
 import { newSessionId, randomSeed, secureRandom } from './core/rng';
-import { createSessionPlan, type ReflectionAnswers, type SessionPlan, type TaskResult } from './core/session';
+import { createSessionPlan, type SessionPlan } from './core/session';
 import { getPointerInput } from './input/pointerLock';
 import { Instructor } from './ui/Instructor';
 import { Reflection } from './ui/Reflection';
+import { ResultsPage } from './ui/results/ResultsPage';
 import { TaskScreen } from './ui/TaskScreen';
 import { Welcome } from './ui/Welcome';
 
 type Screen =
   | { name: 'welcome' }
   | { name: 'task'; plan: SessionPlan; skipPractice: boolean }
-  | { name: 'reflection'; plan: SessionPlan; result: TaskResult }
-  | { name: 'results'; plan: SessionPlan; result: TaskResult; reflection: ReflectionAnswers };
+  | { name: 'reflection'; session: SessionRecord }
+  | { name: 'results'; session: SessionRecord };
 
 /** True while the address ends in `#/instructors`. */
 function useInstructorRoute(): boolean {
@@ -49,6 +51,11 @@ export function App() {
 
   const linkCode = readLinkCode(window.location.search);
   const quickDemo = linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V1.id;
+
+  // Each screen starts at the top of the page.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [screen.name]);
 
   /** Must be called directly from a click handler: pointer lock needs the user gesture. */
   const startSession = (assignment: Assignment, skipPractice: boolean) => {
@@ -80,7 +87,7 @@ export function App() {
           skipPractice={screen.skipPractice}
           onComplete={(result) => {
             setCompletedPresetIds((ids) => [...ids, screen.plan.preset.id]);
-            setScreen({ name: 'reflection', plan: screen.plan, result });
+            setScreen({ name: 'reflection', session: buildSessionRecord(screen.plan, result, null) });
           }}
           onQuit={() => {
             getPointerInput().release();
@@ -92,28 +99,22 @@ export function App() {
     case 'reflection':
       return (
         <Reflection
-          onDone={(reflection) =>
-            setScreen({ name: 'results', plan: screen.plan, result: screen.result, reflection })
-          }
+          onDone={(reflection) => setScreen({ name: 'results', session: withReflection(screen.session, reflection) })}
         />
       );
 
     case 'results': {
-      // Placeholder reveal; the full results page arrives with milestone 3.
-      const other = assignOtherCondition(screen.plan.preset.id);
+      const other = otherCanonicalPreset(screen.session.preset.id);
       return (
-        <main className="page">
-          <h1>Your session</h1>
-          <p className="lede">
-            You completed <strong>{screen.plan.preset.label}</strong> ({screen.result.records.length} recorded
-            attempts).
-          </p>
-          {other && (
-            <button type="button" className="button" onClick={() => startSession(other, true)}>
-              Try the other condition
-            </button>
-          )}
-        </main>
+        <ResultsPage
+          key={screen.session.sessionId}
+          session={screen.session}
+          otherVersionLabel={other ? other.label : null}
+          onTryOther={() => {
+            const assignment = assignOtherCondition(screen.session.preset.id);
+            if (assignment) startSession(assignment, true);
+          }}
+        />
       );
     }
   }
