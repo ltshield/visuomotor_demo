@@ -1,0 +1,405 @@
+/*
+ * styles.css — all styling for the app.
+ *
+ * Two visual modes:
+ *   - "page" screens (welcome, reflection, results, instructor): light, readable.
+ *   - the task workspace: dark and bare, so nothing competes with the targets.
+ */
+
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --text: #1b2230;
+  --muted: #586273;
+  --border: #d8dde5;
+  --accent: #1f6fb2;
+  --accent-strong: #185a91;
+  --accent-soft: #e6f0f9;
+  --warn-bg: #fff6e0;
+  --warn-border: #e2b23c;
+  --danger: #a3341f;
+
+  --ws-bg: #12151a;
+  --ws-text: #d7dce4;
+  --ws-muted: #8d97a6;
+  --ws-target: #566072;
+  --ws-target-active: #f6b93b;
+  --ws-start: #8b95a5;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 0.5em;
+}
+
+h1 {
+  font-size: 1.75rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+}
+
+p {
+  margin: 0 0 0.9em;
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.92em;
+  background: #eef0f4;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+/* ---------- page layout ---------- */
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 20px 56px;
+}
+
+.page.wide {
+  max-width: 1080px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+
+.lede {
+  font-size: 1.08rem;
+  color: var(--text);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.9rem;
+}
+
+.plain-list {
+  margin: 0 0 0.9em;
+  padding-left: 1.2em;
+}
+
+.plain-list li {
+  margin-bottom: 0.4em;
+}
+
+.notice {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.footer-links {
+  margin-top: 24px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* ---------- buttons & form controls ---------- */
+
+.button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: #b9c1cd;
+}
+
+.button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid #8fbfe8;
+  outline-offset: 2px;
+}
+
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.button.primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.button.large {
+  font-size: 1.1rem;
+  padding: 12px 28px;
+}
+
+.button.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+textarea,
+input[type='text'] {
+  font: inherit;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 18px;
+}
+
+legend,
+.field-label {
+  font-weight: 600;
+  margin-bottom: 6px;
+  padding: 0;
+  display: block;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.choice-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ---------- task workspace ---------- */
+
+.task {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--ws-bg);
+  color: var(--ws-text);
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+
+.task-top {
+  width: 100%;
+  flex: 0 0 auto;
+  min-height: 64px;
+  padding: 10px 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ws-muted);
+}
+
+.task-message {
+  margin: 0;
+  min-height: 2.9em;
+  max-width: 640px;
+  text-align: center;
+  font-size: 1rem;
+  color: var(--ws-text);
+}
+
+.progress {
+  width: min(420px, 60vw);
+  height: 6px;
+  border-radius: 3px;
+  background: #2a303a;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: #6f7b8d;
+  transition: width 200ms linear;
+}
+
+.task-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The workspace is square and never drawn larger than 1 CSS px per workspace unit. */
+.workspace {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-height: 564px;
+  max-width: min(100%, 564px);
+  aspect-ratio: 1 / 1;
+}
+
+.target {
+  fill: none;
+  stroke: var(--ws-target);
+  stroke-width: 2;
+}
+
+.target.is-active {
+  fill: var(--ws-target-active);
+  stroke: var(--ws-target-active);
+}
+
+.start-ring {
+  fill: none;
+  stroke: var(--ws-start);
+  stroke-width: 2;
+}
+
+.start-ring.is-holding {
+  stroke: #ffffff;
+  fill: rgba(255, 255, 255, 0.14);
+}
+
+.cursor-dot {
+  fill: #ffffff;
+  stroke: var(--ws-bg);
+  stroke-width: 1.5;
+}
+
+.task-bottom {
+  flex: 0 0 auto;
+  padding: 6px 0 10px;
+  font-size: 0.78rem;
+  color: #5d6675;
+}
+
+.task-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 21, 26, 0.86);
+  padding: 16px;
+}
+
+.task-card {
+  max-width: 470px;
+  background: #1d222b;
+  border: 1px solid #343c49;
+  border-radius: 12px;
+  padding: 22px 24px;
+  text-align: center;
+  color: var(--ws-text);
+}
+
+.task-card h2 {
+  color: #fff;
+}
+
+.task-card-action {
+  font-weight: 600;
+  color: var(--ws-target-active);
+  margin-bottom: 0;
+}
+
+.task-card-error {
+  color: #ffb4a3;
+}
+
+.task-card-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.task-card .button.quiet {
+  color: var(--ws-muted);
+}

@@ -1,0 +1,3 @@
+# Keep LF line endings everywhere so diffs stay clean across Windows/macOS/Linux.
+* text=auto eol=lf
+*.png binary

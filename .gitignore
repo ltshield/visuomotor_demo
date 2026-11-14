@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+Thumbs.db
+.vite/
+coverage/
+e2e/output/
+*.log
