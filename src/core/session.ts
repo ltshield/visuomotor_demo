@@ -9,8 +9,48 @@
  * `PracticeSummary`.
  */
 
+import { presetForAssignment, type Assignment } from './assignment';
 import type { AttemptRecord, InterruptionRecord } from './engine';
-import type { TrialSpec } from './schedule';
+import type { PresetConfig } from './presets';
+import { generateSchedule, type TrialSpec } from './schedule';
+
+/** Everything decided before a session starts. Saved verbatim with the data. */
+export interface SessionPlan {
+  /** Random label for this run's data file. Not a participant identifier. */
+  sessionId: string;
+  preset: PresetConfig;
+  assignment: Assignment;
+  /** Seed that reproduces the target order via `generateSchedule(preset, seed)`. */
+  seed: number;
+  schedule: TrialSpec[];
+  /** 1 for the first run since the page was opened, 2 for the next, and so on. */
+  runNumber: number;
+  /** Presets already completed during this page visit, oldest first (possible carry-over). */
+  previousPresetIds: string[];
+  /** Wall-clock creation time, ISO 8601 UTC. */
+  createdAtIso: string;
+}
+
+/** Builds the plan for a new session. Pure: randomness and the clock are supplied by the caller. */
+export function createSessionPlan(args: {
+  assignment: Assignment;
+  seed: number;
+  sessionId: string;
+  previousPresetIds: readonly string[];
+  now: Date;
+}): SessionPlan {
+  const preset = presetForAssignment(args.assignment);
+  return {
+    sessionId: args.sessionId,
+    preset,
+    assignment: args.assignment,
+    seed: args.seed,
+    schedule: generateSchedule(preset, args.seed),
+    runNumber: args.previousPresetIds.length + 1,
+    previousPresetIds: [...args.previousPresetIds],
+    createdAtIso: args.now.toISOString(),
+  };
+}
 
 export interface EnvironmentInfo {
   userAgent: string;
@@ -51,6 +91,18 @@ export interface PracticeSummary {
   reachesCompleted: number;
   /** Includes repeats after a timed-out or interrupted practice reach. */
   attempts: number;
+}
+
+/** Optional answers given after the task and before the reveal. */
+export interface ReflectionAnswers {
+  /** True when the participant pressed Skip; the other fields are then empty. */
+  skipped: boolean;
+  /** Free text: what, if anything, seemed to change. */
+  noticed: string;
+  /** "Did you deliberately change how you aimed?" */
+  changedAim: 'yes' | 'no' | 'unsure' | null;
+  /** Self-reported pointing device. */
+  device: 'mouse' | 'trackpad' | 'other' | null;
 }
 
 export interface TaskResult {

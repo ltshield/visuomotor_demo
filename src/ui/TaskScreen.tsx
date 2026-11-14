@@ -33,7 +33,7 @@ type Stage = 'practice' | 'ready' | 'experiment';
 type LockState = 'pending' | 'locked' | 'unlocked';
 
 /** On-screen wording. Neutral by design: it never describes what will change or why. */
-const MESSAGES = {
+export const TASK_MESSAGES = {
   '': '',
   'center-first': 'Move the white dot into the ring at the center and hold it still.',
   'reach-first': 'A target lit up. Slice the dot straight through it in one quick movement. Don’t stop on it.',
@@ -44,7 +44,7 @@ const MESSAGES = {
   'hidden-reach': 'The dot is hidden. Reach through the lit target anyway.',
   timeout: 'Time ran out on that reach. Move all the way through the lit target in one quick movement.',
 } as const;
-type MessageKey = keyof typeof MESSAGES;
+type MessageKey = keyof typeof TASK_MESSAGES;
 
 /** The engine operations this screen uses, common to the practice and experiment engines. */
 type RunningEngine = Pick<TrialEngine, 'handleMove' | 'tick' | 'interrupt' | 'resume' | 'getView'>;
@@ -330,7 +330,7 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
           </div>
         )}
         <p className="task-message" aria-live="polite">
-          {MESSAGES[messageKey]}
+          {TASK_MESSAGES[messageKey]}
         </p>
       </div>
 

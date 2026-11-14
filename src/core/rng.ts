@@ -43,3 +43,19 @@ export function randomSeed(): number {
   }
   return Math.floor(Math.random() * 4294967296) >>> 0;
 }
+
+/** A uniform float in [0, 1) from the same unpredictable source; used for the 50/50 condition coin. */
+export function secureRandom(): number {
+  return randomSeed() / 4294967296;
+}
+
+/**
+ * A random identifier for one session. It labels a data file; it is not a
+ * participant identifier and is never stored between visits.
+ */
+export function newSessionId(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  const hex = () => randomSeed().toString(16).padStart(8, '0');
+  return `${hex()}-${hex()}-${hex()}-${hex()}`;
+}
