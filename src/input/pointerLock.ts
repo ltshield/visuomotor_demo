@@ -24,7 +24,7 @@
  * Using a single event type means a movement is never counted twice.
  *
  * Key exports: `PointerLockInput`, `toWorkspaceDelta`, `splitMovement`,
- * `getPointerInput`.
+ * `sanitizeTimestamp`, `getPointerInput`.
  */
 
 import type { InterruptReason } from '../core/engine';
@@ -59,6 +59,20 @@ export function toWorkspaceDelta(movementX: number, movementY: number, gain: num
     dx: movementX * gain,
     dy: movementY === 0 ? 0 : -movementY * gain, // avoid producing −0
   };
+}
+
+/** How far an event timestamp may sit from "now" and still be believed (ms). */
+const MAX_TIMESTAMP_SKEW_MS = 10_000;
+
+/**
+ * Event timestamps should be on the same monotonic timeline as
+ * `performance.now()`. If one is wildly off (a browser reporting wall-clock
+ * time, for instance), fall back to the current time rather than let a bogus
+ * value jump the task's clock and freeze its timers.
+ */
+export function sanitizeTimestamp(eventTimeStamp: number, nowMs: number): number {
+  if (!Number.isFinite(eventTimeStamp)) return nowMs;
+  return Math.abs(eventTimeStamp - nowMs) <= MAX_TIMESTAMP_SKEW_MS ? eventTimeStamp : nowMs;
 }
 
 /** Largest disagreement (CSS px, per axis) tolerated between an event's total and the sum of its parts. */
@@ -184,11 +198,12 @@ export class PointerLockInput {
     const parts =
       'getCoalescedEvents' in e && typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
     this.eventCount += 1;
+    const now = performance.now();
     for (const s of splitMovement(e, parts)) {
       if (s.movementX === 0 && s.movementY === 0) continue;
       if (!Number.isFinite(s.movementX) || !Number.isFinite(s.movementY)) continue;
       this.sampleCount += 1;
-      this.listener.onMove?.(s.movementX, s.movementY, s.timeStamp);
+      this.listener.onMove?.(s.movementX, s.movementY, sanitizeTimestamp(s.timeStamp, now));
     }
   };
 
@@ -215,6 +230,9 @@ export class PointerLockInput {
   };
 
   private handleBlur = (): void => {
+    // Some blur events are momentary (focus moving within the page). Only a
+    // window that has really lost focus stops the task.
+    if (typeof document.hasFocus === 'function' && document.hasFocus()) return;
     this.listener.onInterruption?.('window-blur', performance.now());
   };
 

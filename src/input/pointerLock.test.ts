@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitMovement, toWorkspaceDelta, type MovementSample } from './pointerLock';
+import { sanitizeTimestamp, splitMovement, toWorkspaceDelta, type MovementSample } from './pointerLock';
 
 const sample = (movementX: number, movementY: number, timeStamp: number): MovementSample => ({
   movementX,
@@ -20,6 +20,20 @@ describe('toWorkspaceDelta', () => {
   it('never produces negative zero', () => {
     const d = toWorkspaceDelta(3, 0, 1);
     expect(Object.is(d.dy, 0)).toBe(true);
+  });
+});
+
+describe('sanitizeTimestamp', () => {
+  it('keeps an event timestamp that is on the same timeline as the clock', () => {
+    expect(sanitizeTimestamp(5000.25, 5003)).toBe(5000.25);
+    expect(sanitizeTimestamp(5004, 5003)).toBe(5004);
+  });
+
+  it('falls back to the current time for a wildly different or invalid timestamp', () => {
+    // e.g. a browser reporting wall-clock milliseconds instead of time since page load
+    expect(sanitizeTimestamp(1_794_000_000_000, 5003)).toBe(5003);
+    expect(sanitizeTimestamp(NaN, 5003)).toBe(5003);
+    expect(sanitizeTimestamp(0, 60_000)).toBe(60_000);
   });
 });
 

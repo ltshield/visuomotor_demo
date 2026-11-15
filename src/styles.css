@@ -338,6 +338,9 @@ legend,
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Instructions, workspace and hint stay together in the middle of the screen,
+     so on a large monitor the instructions sit just above the workspace. */
+  justify-content: center;
   background: var(--ws-bg);
   color: var(--ws-text);
   user-select: none;
@@ -390,7 +393,8 @@ legend,
 
 .task-stage {
   position: relative;
-  flex: 1 1 auto;
+  /* Full workspace size when there is room; shrinks on short windows. */
+  flex: 0 1 564px;
   min-height: 0;
   width: 100%;
   display: flex;

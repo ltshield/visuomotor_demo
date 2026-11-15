@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "Discovery-based visuomotor learning lab: a 5-10 minute browser reaching activity for undergraduate neuromechanics.",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node e2e/full-session.mjs"
+    "e2e": "node e2e/full-session.mjs",
+    "verify": "npm run typecheck && npm test && npm run build && npm run e2e"
   },
   "dependencies": {
     "react": "^19.3.1",

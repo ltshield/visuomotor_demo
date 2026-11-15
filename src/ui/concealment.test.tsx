@@ -56,6 +56,25 @@ describe('Welcome screen', () => {
     expect(container.textContent).not.toMatch(REVEALING);
   });
 
+  it('does not warn about embedding when opened in its own tab', () => {
+    render(<Welcome quickDemo={false} onStart={() => {}} />);
+    expect(screen.queryByTestId('framed-notice')).toBeNull();
+  });
+
+  it('offers to open in a new tab when embedded inside another page', () => {
+    const realTop = Object.getOwnPropertyDescriptor(window, 'top');
+    Object.defineProperty(window, 'top', { configurable: true, get: () => ({}) });
+    try {
+      const { container } = render(<Welcome quickDemo={false} onStart={() => {}} />);
+      const notice = screen.getByTestId('framed-notice');
+      expect(notice.textContent).toMatch(/open the activity in its own tab/);
+      expect(notice.querySelector('a')?.getAttribute('target')).toBe('_blank');
+      expect(container.textContent).not.toMatch(REVEALING);
+    } finally {
+      if (realTop) Object.defineProperty(window, 'top', realTop);
+    }
+  });
+
   it('offers an unobtrusive link to the instructor page', () => {
     render(<Welcome quickDemo={false} onStart={() => {}} />);
     expect(screen.getByRole('link', { name: 'For instructors' }).getAttribute('href')).toBe('#/instructors');

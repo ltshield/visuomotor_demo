@@ -21,6 +21,16 @@ interface EnvironmentCheck {
   /** No precise pointing device at all: a phone or tablet. */
   touchOnly: boolean;
   windowTooSmall: boolean;
+  /** The page is shown inside another page (e.g. embedded in a course site), where mouse capture is often blocked. */
+  framed: boolean;
+}
+
+function isFramed(): boolean {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true; // reading window.top can be refused across sites, which itself means "framed"
+  }
 }
 
 function checkEnvironment(): EnvironmentCheck {
@@ -29,6 +39,7 @@ function checkEnvironment(): EnvironmentCheck {
     pointerLockSupported: PointerLockInput.isSupported(),
     touchOnly: query('(pointer: coarse)') && !query('(any-pointer: fine)'),
     windowTooSmall: window.innerWidth < MIN_WIDTH || window.innerHeight < MIN_HEIGHT,
+    framed: isFramed(),
   };
 }
 
@@ -104,6 +115,15 @@ export function Welcome({ quickDemo, onStart }: WelcomeProps) {
         <p className="notice" role="alert">
           This looks like a touch-only device. The activity needs a mouse, so please open this page on a desktop or
           laptop computer.
+        </p>
+      )}
+      {!blocked && env.framed && (
+        <p className="notice" data-testid="framed-notice">
+          This page is being shown inside another page. Capturing the mouse is often blocked there, so{' '}
+          <a href={window.location.href} target="_blank" rel="noopener noreferrer">
+            open the activity in its own tab
+          </a>{' '}
+          before you start.
         </p>
       )}
       {!blocked && env.windowTooSmall && (

@@ -78,6 +78,8 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
   const [lockError, setLockError] = useState<string | null>(null);
   const [messageKey, setMessageKey] = useState<MessageKey>('');
   const [practiceDone, setPracticeDone] = useState(0);
+  /** True while the engine is paused (mouse released, or the window lost focus). */
+  const [enginePaused, setEnginePaused] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -124,6 +126,7 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
     let shownPhase = '';
     let shownProgress = -1;
     let shownPracticeDone = -1;
+    let shownPaused = false;
 
     // --- display refresh estimate ---
     const frameGaps: number[] = [];
@@ -234,6 +237,14 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
       lastCursor = view.cursor;
       draw(view);
 
+      // Keep React informed of a pause so a recovery prompt is always on screen
+      // while the engine is not running (see the overlays below).
+      const pausedNow = view.phase === 'paused';
+      if (pausedNow !== shownPaused) {
+        shownPaused = pausedNow;
+        setEnginePaused(pausedNow);
+      }
+
       if (stageNow === 'practice') {
         showMessage(practiceMessage(view));
         if (view.trialsCompleted !== shownPracticeDone) {
@@ -268,6 +279,8 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
           setEverLocked(true);
           setLockError(null);
           active?.resume(performance.now());
+          shownPaused = false;
+          setEnginePaused(false);
         }
       },
       onLockError(message) {
@@ -279,7 +292,14 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
         active?.interrupt(reason, tMs);
       },
       onButtonDown() {
-        if (stageNow === 'ready') beginExperiment();
+        if (stageNow === 'ready') {
+          beginExperiment();
+        } else if (active && active.getView().phase === 'paused') {
+          // Paused while the mouse is still captured (the window lost focus but
+          // kept the lock). No on-screen button can be clicked in that state,
+          // so any mouse click resumes.
+          active.resume(performance.now());
+        }
       },
     });
 
@@ -381,6 +401,20 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
                 the activity, so just keep going.
               </p>
               <p className="task-card-action">Click the mouse button to begin.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Paused while the mouse is still captured: no button can be clicked, so a plain click resumes. */}
+        {lockState === 'locked' && enginePaused && (
+          <div className="task-overlay">
+            <div className="task-card">
+              <h2>Paused</h2>
+              <p>
+                This window lost focus for a moment, so the activity paused. Nothing has been lost; a reach that was
+                cut off will simply be repeated.
+              </p>
+              <p className="task-card-action">Click the mouse button to continue.</p>
             </div>
           </div>
         )}
