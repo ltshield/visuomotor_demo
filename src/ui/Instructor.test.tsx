@@ -38,18 +38,18 @@ describe('preset selector', () => {
     openPanel();
     expect(optionNames()).toEqual(['Sudden 45°', 'Gradual 0°→45°', 'Quick Demo']);
     expect(presetSelect().value).toBe('sudden');
-    expect(protocolId()).toBe('rotation-sudden-45-v2');
+    expect(protocolId()).toBe('rotation-sudden-45-v3');
     expect(screen.queryByTestId('custom-warning')).toBeNull();
   });
 
   it('choosing a preset sets every setting to that preset’s defaults', () => {
     openPanel();
     fireEvent.change(presetSelect(), { target: { value: 'gradual' } });
-    expect(protocolId()).toBe('rotation-gradual-45-v2');
+    expect(protocolId()).toBe('rotation-gradual-45-v3');
     expect((screen.getByLabelText(/^Gradual \(ramps/) as HTMLInputElement).checked).toBe(true);
 
     fireEvent.change(presetSelect(), { target: { value: 'quick-demo' } });
-    expect(protocolId()).toBe('rotation-quickdemo-45-v2');
+    expect(protocolId()).toBe('rotation-quickdemo-45-v3');
     expect((screen.getByLabelText('Quick (16 trials)') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText(/^Sudden \(all/) as HTMLInputElement).checked).toBe(true);
   });
@@ -78,7 +78,7 @@ describe('canonical preset protection', () => {
   it('a changed setting gets a new custom id and the pooling warning; the canonical id is not reused', () => {
     openPanel();
     choose('30°');
-    expect(protocolId()).toBe('rotation-sudden-30-custom-v2');
+    expect(protocolId()).toBe('rotation-sudden-30-custom-v3');
     const warning = screen.getByTestId('custom-warning');
     expect(warning.textContent).toContain(CUSTOM_WARNING);
     expect(warning.textContent).toContain(
@@ -88,11 +88,11 @@ describe('canonical preset protection', () => {
 
   it('every single departure from the canonical defaults is custom', () => {
     const changes: Array<[string | RegExp, string]> = [
-      ['15°', 'rotation-sudden-15-custom-v2'],
-      ['60°', 'rotation-sudden-60-custom-v2'],
-      ['Extended (64 trials)', 'rotation-sudden-45-custom-extended-v2'],
-      ['Visible cursor', 'rotation-sudden-45-custom-aevisible-v2'],
-      ['Catch trials', 'rotation-sudden-45-custom-nocatch-v2'],
+      ['15°', 'rotation-sudden-15-custom-v3'],
+      ['60°', 'rotation-sudden-60-custom-v3'],
+      ['Extended (64 trials)', 'rotation-sudden-45-custom-extended-v3'],
+      ['Visible cursor', 'rotation-sudden-45-custom-aevisible-v3'],
+      ['Catch trials', 'rotation-sudden-45-custom-nocatch-v3'],
     ];
     for (const [label, id] of changes) {
       openPanel();
@@ -108,7 +108,7 @@ describe('canonical preset protection', () => {
     openPanel();
     choose('30°');
     choose('45°');
-    expect(protocolId()).toBe('rotation-sudden-45-v2');
+    expect(protocolId()).toBe('rotation-sudden-45-v3');
     expect(presetSelect().value).toBe('sudden');
     expect(optionNames()).not.toContain('Custom');
     expect(screen.queryByTestId('custom-warning')).toBeNull();
@@ -117,7 +117,7 @@ describe('canonical preset protection', () => {
   it('switching schedule between the two canonical presets stays canonical', () => {
     openPanel();
     choose(/^Gradual \(ramps/);
-    expect(protocolId()).toBe('rotation-gradual-45-v2');
+    expect(protocolId()).toBe('rotation-gradual-45-v3');
     expect(presetSelect().value).toBe('gradual');
     expect(screen.queryByTestId('custom-warning')).toBeNull();
   });
@@ -132,7 +132,7 @@ describe('canonical preset protection', () => {
     choose('Visible cursor');
     choose('Catch trials');
     choose(/^Gradual \(ramps/);
-    expect(protocolId()).toBe('rotation-gradual-60-custom-extended-aevisible-nocatch-v2');
+    expect(protocolId()).toBe('rotation-gradual-60-custom-extended-aevisible-nocatch-v3');
     expect(canonical()).toEqual(before);
   });
 });
@@ -224,9 +224,9 @@ describe('reference details', () => {
   it('defines the standard presets, the short version and, when one is selected, the custom protocol', () => {
     openPanel();
     const reference = document.querySelector('details.reference') as HTMLElement;
-    expect(reference.textContent).toContain('rotation-sudden-45-v2');
-    expect(reference.textContent).toContain('rotation-gradual-45-v2');
-    expect(reference.textContent).toContain('rotation-quickdemo-45-v2');
+    expect(reference.textContent).toContain('rotation-sudden-45-v3');
+    expect(reference.textContent).toContain('rotation-gradual-45-v3');
+    expect(reference.textContent).toContain('rotation-quickdemo-45-v3');
     expect(reference.textContent).toMatch(/6\.43°/); // the gradual ramp step is spelled out
     expect(reference.textContent).not.toContain('The protocol selected above');
 
@@ -234,7 +234,7 @@ describe('reference details', () => {
     choose('Catch trials');
     expect(reference.textContent).toContain('The protocol selected above');
     expect(reference.textContent).toContain('Custom: sudden 30° rotation');
-    expect(reference.textContent).toContain('rotation-sudden-30-custom-nocatch-v2');
+    expect(reference.textContent).toContain('rotation-sudden-30-custom-nocatch-v3');
   });
 
   it('explains how a reach registers and that nothing is measured after arrival', () => {
@@ -244,6 +244,7 @@ describe('reference details', () => {
     expect(text).toContain('in any direction');
     expect(text).toContain('the cursor jumps straight back to the center');
     expect(text).toContain('first arrival at 222 units from the center');
+    expect(screen.getByTestId('speed-rule').textContent).toContain('takes longer than 500 ms, “Too slow” appears');
   });
 });
 

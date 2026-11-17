@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClassResponse, ClassSession } from '../../core/classWire';
-import { GRADUAL_45_V2, SUDDEN_45_V2 } from '../../core/presets';
+import { GRADUAL_45_V3, SUDDEN_45_V3 } from '../../core/presets';
 import type { FetchLike } from '../classClient';
 import { ClassView } from './ClassView';
 
@@ -64,7 +64,7 @@ describe('class view', () => {
 
   it('counts each version and reports the class means', async () => {
     const fetchImpl = server(() =>
-      json(response([session(SUDDEN_45_V2.id, -20), session(SUDDEN_45_V2.id, -30), session(GRADUAL_45_V2.id, -10)])),
+      json(response([session(SUDDEN_45_V3.id, -20), session(SUDDEN_45_V3.id, -30), session(GRADUAL_45_V3.id, -10)])),
     );
     render(<ClassView code="NEURO451" fetchImpl={fetchImpl} pollMs={60_000} />);
     await waitFor(() => expect(screen.getByTestId('class-total').textContent).toBe('3'));
@@ -80,7 +80,7 @@ describe('class view', () => {
   });
 
   it('switches every number to the initial direction, and back', async () => {
-    const fetchImpl = server(() => json(response([session(SUDDEN_45_V2.id, -20), session(SUDDEN_45_V2.id, -30)])));
+    const fetchImpl = server(() => json(response([session(SUDDEN_45_V3.id, -20), session(SUDDEN_45_V3.id, -30)])));
     render(<ClassView code="NEURO451" fetchImpl={fetchImpl} pollMs={60_000} />);
     await waitFor(() => expect(screen.getByTestId('class-total').textContent).toBe('2'));
     fireEvent.click(screen.getByRole('button', { name: 'Initial direction' }));
@@ -95,7 +95,7 @@ describe('class view', () => {
 
   it('polls with the version it holds, and keeps the data when the server says nothing changed', async () => {
     const fetchImpl = server(
-      () => json(response([session(SUDDEN_45_V2.id, -20)]), 200, { etag: '"NEURO451-1-1"' }),
+      () => json(response([session(SUDDEN_45_V3.id, -20)]), 200, { etag: '"NEURO451-1-1"' }),
       () => new Response(null, { status: 304 }),
     );
     render(<ClassView code="NEURO451" fetchImpl={fetchImpl} pollMs={25} />);
@@ -108,7 +108,7 @@ describe('class view', () => {
 
   it('keeps showing the last data when a refresh fails, says so, and keeps trying', async () => {
     const fetchImpl = server(
-      () => json(response([session(SUDDEN_45_V2.id, -20), session(GRADUAL_45_V2.id, -5)])),
+      () => json(response([session(SUDDEN_45_V3.id, -20), session(GRADUAL_45_V3.id, -5)])),
       () => {
         throw new TypeError('offline');
       },
@@ -132,11 +132,11 @@ describe('class view', () => {
   });
 
   it('offers a separate view for another protocol and never pools it with the standard versions', async () => {
-    const fetchImpl = server(() => json(response([session(SUDDEN_45_V2.id, -20), session('rotation-sudden-30-custom-v2', -99)])));
+    const fetchImpl = server(() => json(response([session(SUDDEN_45_V3.id, -20), session('rotation-sudden-30-custom-v3', -99)])));
     render(<ClassView code="NEURO451" fetchImpl={fetchImpl} pollMs={60_000} />);
     await waitFor(() => expect(screen.getByLabelText('Protocol shown')).toBeTruthy());
     const options = [...(screen.getByLabelText('Protocol shown') as HTMLSelectElement).options].map((o) => o.textContent);
-    expect(options).toEqual(['Standard versions: sudden and gradual (1)', 'rotation-sudden-30-custom-v2 (1)']);
+    expect(options).toEqual(['Standard versions: sudden and gradual (1)', 'rotation-sudden-30-custom-v3 (1)']);
     expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−10%');
   });
 });

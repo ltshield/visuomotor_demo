@@ -42,9 +42,9 @@ function customSession(settings: InstructorSettings): SessionRecord {
 
 function renderResults(session: SessionRecord, onTryOther = vi.fn()) {
   const other =
-    session.preset.id === 'rotation-sudden-45-v2'
+    session.preset.id === 'rotation-sudden-45-v3'
       ? 'Gradual 0°→45° rotation'
-      : session.preset.id === 'rotation-gradual-45-v2'
+      : session.preset.id === 'rotation-gradual-45-v3'
         ? 'Sudden 45° rotation'
         : null;
   const view = render(<ResultsPage session={session} otherVersionLabel={other} onTryOther={onTryOther} />);
@@ -92,7 +92,7 @@ describe('reveal', () => {
   });
 
   it('warns about carry-over on a repeat run', () => {
-    const second: SessionRecord = { ...gradual, runNumber: 2, previousPresetIds: ['rotation-sudden-45-v2'] };
+    const second: SessionRecord = { ...gradual, runNumber: 2, previousPresetIds: ['rotation-sudden-45-v3'] };
     const { text } = renderResults(second);
     expect(text()).toContain('This was run 2 of this visit');
     expect(text()).toContain('the two runs are not a fair comparison of the versions');
@@ -290,8 +290,8 @@ describe('custom protocols', () => {
     expect(screen.getByTestId('revealed-condition').textContent).toBe('Custom: sudden 30° rotation');
     expect(text()).toContain('rotated +30° (counterclockwise) all at once');
     expect(text()).toContain('It was set by the link you opened, which your instructor set up.');
-    expect(text()).toContain('Custom protocol: rotation-sudden-30-custom-v2');
-    expect(text()).toContain('This was a custom protocol set up by your instructor (rotation-sudden-30-custom-v2)');
+    expect(text()).toContain('Custom protocol: rotation-sudden-30-custom-v3');
+    expect(text()).toContain('This was a custom protocol set up by your instructor (rotation-sudden-30-custom-v3)');
     expect(text()).toContain('should not be compared or pooled with theirs');
   });
 
@@ -554,9 +554,9 @@ describe('downloads and next steps', () => {
 
     const calls = vi.mocked(downloadText).mock.calls;
     expect(calls.map((c) => c[0])).toEqual([
-      'motor-learning_rotation-sudden-45-v2_20261114-1530_session.json',
-      'motor-learning_rotation-sudden-45-v2_20261114-1530_trials.csv',
-      'motor-learning_rotation-sudden-45-v2_20261114-1530_events.csv',
+      'motor-learning_rotation-sudden-45-v3_20261114-1530_session.json',
+      'motor-learning_rotation-sudden-45-v3_20261114-1530_trials.csv',
+      'motor-learning_rotation-sudden-45-v3_20261114-1530_events.csv',
     ]);
     expect(calls.map((c) => c[2])).toEqual(['application/json', 'text/csv', 'text/csv']);
     const saved = JSON.parse(calls[0][1]) as SessionRecord;
@@ -609,5 +609,33 @@ describe('whole-path error', () => {
     expect(bullet).toContain('−45° would have cancelled the rotation exactly');
     // The scripted reaches are straight, so there was no steering to speak of.
     expect(bullet).toContain('Your hand arrived about where it set off');
+  });
+});
+
+describe('the speed instruction', () => {
+  it('says when every analysed reach was quick enough', () => {
+    renderResults(sudden);
+    expect(screen.getByTestId('speed-fact').textContent).toBe('All 40 of your analysed reaches were quicker than the 0.5 s asked for.');
+  });
+
+  it('counts the slow reaches, says they still count, and marks them in the table', () => {
+    const slow: SessionRecord = { ...sudden, trials: sudden.trials.map((t) => (t.trialNumber <= 3 ? { ...t, tooSlow: true } : t)) };
+    renderResults(slow);
+    const fact = screen.getByTestId('speed-fact').textContent ?? '';
+    expect(fact).toContain('3 of your 40 analysed reaches took longer than the 0.5 s asked for');
+    expect(fact).toContain('They are analysed like the others');
+    const rows = [...document.querySelectorAll('.trial-table tbody tr')];
+    expect(rows[0].textContent).toContain('too slow');
+    expect(rows[5].textContent).not.toContain('too slow');
+  });
+
+  it('says nothing about speed for a session recorded without the instruction', () => {
+    const old: SessionRecord = {
+      ...sudden,
+      preset: { ...sudden.preset, timing: { ...sudden.preset.timing, maxMovementMs: undefined } },
+      trials: sudden.trials.map((t) => ({ ...t, tooSlow: null })),
+    };
+    renderResults(old);
+    expect(screen.queryByTestId('speed-fact')).toBeNull();
   });
 });

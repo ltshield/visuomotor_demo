@@ -17,7 +17,7 @@ import {
   type Assignment,
 } from './core/assignment';
 import { decodeSettings, readCustomCode, type TrialTier } from './core/custom';
-import { QUICK_DEMO_45_V2, otherCanonicalPreset } from './core/presets';
+import { QUICK_DEMO_45_V3, otherCanonicalPreset } from './core/presets';
 import { buildSessionRecord, withReflection, type SessionRecord } from './core/record';
 import { newSessionId, randomSeed, secureRandom } from './core/rng';
 import { createSessionPlan, type SessionPlan } from './core/session';
@@ -45,7 +45,7 @@ type Screen =
 function tierOfLink(linkCode: string | null, customCode: string | null): TrialTier {
   const custom = customCode !== null ? decodeSettings(customCode) : null;
   if (custom) return custom.tier;
-  return linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V2.id ? 'quick' : 'standard';
+  return linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V3.id ? 'quick' : 'standard';
 }
 
 export function App() {
@@ -59,7 +59,7 @@ export function App() {
   // The demo badge belongs to the shipped Quick Demo link only; a valid custom link takes precedence over `c`.
   const quickDemo =
     linkCode !== null &&
-    LINK_CODES[linkCode] === QUICK_DEMO_45_V2.id &&
+    LINK_CODES[linkCode] === QUICK_DEMO_45_V3.id &&
     (customCode === null || decodeSettings(customCode) === null);
 
   // Each screen starts at the top of the page.

@@ -40,7 +40,7 @@ function submission(overrides: Partial<ClassSubmission> = {}, seed = 1): ClassSu
   return {
     sessionId: `00000000-0000-4000-8000-${String(seed).padStart(12, '0')}`,
     classCode: 'NEURO451',
-    presetId: 'rotation-sudden-45-v2',
+    presetId: 'rotation-sudden-45-v3',
     rotationDeg: 45,
     trialTier: 'standard',
     submittedAt: '2026-11-17T18:00:00.000Z',
@@ -150,7 +150,7 @@ describe('schema', () => {
     db.sqlite.exec(`CREATE TABLE trial_errors (sessionId TEXT NOT NULL, trialIndex INTEGER NOT NULL, phase TEXT NOT NULL,
       isCatch INTEGER NOT NULL, rotationApplied REAL NOT NULL, initialDirErrorDeg REAL, valid INTEGER NOT NULL,
       PRIMARY KEY (sessionId, trialIndex))`);
-    db.sqlite.exec(`INSERT INTO sessions VALUES ('old-session-0000000000', 'NEURO451', 'rotation-sudden-45-v2', 45, 'standard', '2026-11-01T00:00:00.000Z', NULL)`);
+    db.sqlite.exec(`INSERT INTO sessions VALUES ('old-session-0000000000', 'NEURO451', 'rotation-sudden-45-v3', 45, 'standard', '2026-11-01T00:00:00.000Z', NULL)`);
     db.sqlite.exec(`INSERT INTO trial_errors VALUES ('old-session-0000000000', 0, 'baseline', 0, 0, 1.5, 1)`);
 
     await submitOk(db, submission());
@@ -172,7 +172,7 @@ describe('POST /api/submit: stores correctly', () => {
       {
         id: '00000000-0000-4000-8000-000000000001',
         classCode: 'NEURO451',
-        presetId: 'rotation-sudden-45-v2',
+        presetId: 'rotation-sudden-45-v3',
         rotationDeg: 45,
         trialTier: 'standard',
         submittedAt: '2026-11-17T18:00:01.000Z', // the server's clock, not the browser's
@@ -453,14 +453,14 @@ describe('GET /api/class/<code>', () => {
   it('returns ONLY the records matching the class code', async () => {
     const db = createTestD1();
     await submitOk(db, submission({ classCode: 'NEURO451' }, 1));
-    await submitOk(db, submission({ classCode: 'NEURO451', presetId: 'rotation-gradual-45-v2' }, 2));
+    await submitOk(db, submission({ classCode: 'NEURO451', presetId: 'rotation-gradual-45-v3' }, 2));
     await submitOk(db, submission({ classCode: 'BIO200' }, 3));
     await submitOk(db, submission({ classCode: 'NEURO4510' }, 4)); // a longer code that starts the same
     await submitOk(db, submission({ classCode: 'NEURO45' }, 5)); // a shorter one
 
     const neuro = await readClass(db, 'NEURO451');
     expect(neuro.count).toBe(2);
-    expect(neuro.sessions.map((s) => s.presetId).sort()).toEqual(['rotation-gradual-45-v2', 'rotation-sudden-45-v2']);
+    expect(neuro.sessions.map((s) => s.presetId).sort()).toEqual(['rotation-gradual-45-v3', 'rotation-sudden-45-v3']);
     // Each session carries its own 40 reaches and nobody else's.
     for (const s of neuro.sessions) {
       expect(s.trials).toHaveLength(40);
@@ -576,7 +576,7 @@ describe('end to end: a real session, shared and read back', () => {
     const db = createTestD1();
     await submitOk(db, body);
     const [received] = (await readClass(db, 'NEURO451')).sessions;
-    expect(received.presetId).toBe('rotation-sudden-45-v2');
+    expect(received.presetId).toBe('rotation-sudden-45-v3');
     expect(received.trialTier).toBe('standard');
     expect(received.consciousAdjustment).toBe('yes');
     expect(received.trials).toEqual(sent.trials);

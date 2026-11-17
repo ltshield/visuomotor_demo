@@ -146,6 +146,7 @@ export const TRIALS_CSV_HEADER: string[] = [
   'cursor_visible_during_reach',
   'outcome',
   'hold_completed',
+  'too_slow',
   'valid',
   'invalid_reason',
   'go_cue_ms',
@@ -197,6 +198,7 @@ export function trialsToCsv(session: SessionRecord): string {
     t.cursorVisibleDuringReach,
     t.outcome,
     t.holdCompleted,
+    t.tooSlow,
     t.valid,
     t.invalidReason,
     t.times.goCueMs,
@@ -304,7 +306,7 @@ export function eventsToCsv(session: SessionRecord): string {
 // File names
 // ---------------------------------------------------------------------------
 
-/** Names like `motor-learning_rotation-sudden-45-v2_20261114-1530_session.json` (UTC time of the session). */
+/** Names like `motor-learning_rotation-sudden-45-v3_20261114-1530_session.json` (UTC time of the session). */
 export function exportFileNames(session: SessionRecord): { json: string; trialsCsv: string; eventsCsv: string } {
   const stamp = session.createdAtIso.replace(/[-:]/g, '').replace('T', '-').slice(0, 13);
   const stem = `motor-learning_${session.preset.id}_${stamp}`;

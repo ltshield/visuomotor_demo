@@ -23,11 +23,11 @@ import {
 } from './custom';
 import {
   ALL_PRESETS,
-  GRADUAL_45_V2,
-  QUICK_DEMO_45_V2,
+  GRADUAL_45_V3,
+  QUICK_DEMO_45_V3,
   RETIRED_PRESETS,
   STANDARD_TIMING,
-  SUDDEN_45_V2,
+  SUDDEN_45_V3,
   perturbedReachCount,
   totalTrials,
   validatePreset,
@@ -51,7 +51,7 @@ for (const schedule of SCHEDULE_OPTIONS) {
   }
 }
 
-const CANONICAL_IDS = ['rotation-sudden-45-v2', 'rotation-gradual-45-v2'];
+const CANONICAL_IDS = ['rotation-sudden-45-v3', 'rotation-gradual-45-v3'];
 const SHIPPED_IDS = [...ALL_PRESETS, ...RETIRED_PRESETS].map((p) => p.id);
 
 describe('the settings space', () => {
@@ -67,7 +67,7 @@ describe('the settings space', () => {
       aftereffect: 'hidden',
       catchTrials: true,
     });
-    expect(resolvePreset(DEFAULT_SETTINGS)).toBe(SUDDEN_45_V2);
+    expect(resolvePreset(DEFAULT_SETTINGS)).toBe(SUDDEN_45_V3);
   });
 });
 
@@ -75,7 +75,7 @@ describe('canonical preset protection', () => {
   it('exactly three combinations are shipped presets, and they resolve to the very same objects', () => {
     const named = ALL_SETTINGS.filter((s) => matchNamedPreset(s) !== null);
     expect(named).toHaveLength(3);
-    expect(NAMED_PRESETS.map((n) => n.preset)).toEqual([SUDDEN_45_V2, GRADUAL_45_V2, QUICK_DEMO_45_V2]);
+    expect(NAMED_PRESETS.map((n) => n.preset)).toEqual([SUDDEN_45_V3, GRADUAL_45_V3, QUICK_DEMO_45_V3]);
     for (const n of NAMED_PRESETS) {
       expect(resolvePreset(n.settings)).toBe(n.preset); // identity: nothing was rebuilt or copied
       expect(resolvePreset({ ...n.settings })).toBe(n.preset);
@@ -95,7 +95,7 @@ describe('canonical preset protection', () => {
       for (const settings of variants) {
         const preset = resolvePreset(settings);
         // A sudden Quick-length session IS the shipped Quick Demo; everything else is custom.
-        if (preset === QUICK_DEMO_45_V2) continue;
+        if (preset === QUICK_DEMO_45_V3) continue;
         expect(preset.kind).toBe('custom');
         expect(preset.id).toContain('-custom-');
         expect(CANONICAL_IDS).not.toContain(preset.id);
@@ -105,8 +105,8 @@ describe('canonical preset protection', () => {
   });
 
   it('gives the brief’s example a recognisable id', () => {
-    expect(customPresetId({ ...DEFAULT_SETTINGS, angleDeg: 30 })).toBe('rotation-sudden-30-custom-v2');
-    expect(resolvePreset({ ...DEFAULT_SETTINGS, angleDeg: 30 }).id).toBe('rotation-sudden-30-custom-v2');
+    expect(customPresetId({ ...DEFAULT_SETTINGS, angleDeg: 30 })).toBe('rotation-sudden-30-custom-v3');
+    expect(resolvePreset({ ...DEFAULT_SETTINGS, angleDeg: 30 }).id).toBe('rotation-sudden-30-custom-v3');
   });
 
   it('NO combination other than the canonical two ever carries a canonical id', () => {
@@ -121,17 +121,17 @@ describe('canonical preset protection', () => {
   });
 
   it('building custom presets never alters the shipped ones', () => {
-    const before = JSON.stringify([SUDDEN_45_V2, GRADUAL_45_V2, QUICK_DEMO_45_V2]);
+    const before = JSON.stringify([SUDDEN_45_V3, GRADUAL_45_V3, QUICK_DEMO_45_V3]);
     for (const settings of ALL_SETTINGS) {
       const preset = buildCustomPreset(settings);
       // Mutating a custom preset's structure must not reach into a shipped preset.
       preset.structure.adaptation.catchSlots.push(1);
       preset.structure.targetAnglesDeg.push(999);
     }
-    expect(JSON.stringify([SUDDEN_45_V2, GRADUAL_45_V2, QUICK_DEMO_45_V2])).toBe(before);
-    expect(SUDDEN_45_V2.id).toBe('rotation-sudden-45-v2');
-    expect(GRADUAL_45_V2.id).toBe('rotation-gradual-45-v2');
-    expect(SUDDEN_45_V2.structure.adaptation.catchSlots).toEqual([12, 20]);
+    expect(JSON.stringify([SUDDEN_45_V3, GRADUAL_45_V3, QUICK_DEMO_45_V3])).toBe(before);
+    expect(SUDDEN_45_V3.id).toBe('rotation-sudden-45-v3');
+    expect(GRADUAL_45_V3.id).toBe('rotation-gradual-45-v3');
+    expect(SUDDEN_45_V3.structure.adaptation.catchSlots).toEqual([12, 20]);
   });
 
   it('custom ids are unique: two different protocols never share one, so they are never pooled together', () => {
@@ -139,16 +139,16 @@ describe('canonical preset protection', () => {
     expect(new Set(ids).size).toBe(96);
     for (const id of ids) {
       expect(SHIPPED_IDS).not.toContain(id);
-      expect(id).toMatch(/^rotation-(sudden|gradual)-(15|30|45|60)-custom(-quick|-extended)?(-aevisible)?(-nocatch)?-v2$/);
+      expect(id).toMatch(/^rotation-(sudden|gradual)-(15|30|45|60)-custom(-quick|-extended)?(-aevisible)?(-nocatch)?-v3$/);
     }
   });
 
   it('names every departure from the standard defaults in the id', () => {
     expect(customPresetId({ schedule: 'gradual', angleDeg: 60, tier: 'extended', aftereffect: 'visible', catchTrials: false })).toBe(
-      'rotation-gradual-60-custom-extended-aevisible-nocatch-v2',
+      'rotation-gradual-60-custom-extended-aevisible-nocatch-v3',
     );
-    expect(customPresetId({ ...DEFAULT_SETTINGS, tier: 'quick', angleDeg: 15 })).toBe('rotation-sudden-15-custom-quick-v2');
-    expect(customPresetId({ ...DEFAULT_SETTINGS, catchTrials: false })).toBe('rotation-sudden-45-custom-nocatch-v2');
+    expect(customPresetId({ ...DEFAULT_SETTINGS, tier: 'quick', angleDeg: 15 })).toBe('rotation-sudden-15-custom-quick-v3');
+    expect(customPresetId({ ...DEFAULT_SETTINGS, catchTrials: false })).toBe('rotation-sudden-45-custom-nocatch-v3');
   });
 });
 
@@ -173,9 +173,9 @@ describe('custom presets are complete, valid protocols', () => {
     for (const settings of ALL_SETTINGS) {
       const preset = buildCustomPreset(settings);
       expect(preset.timing).toEqual(STANDARD_TIMING);
-      expect(preset.geometry).toEqual(SUDDEN_45_V2.geometry);
-      expect(preset.criteria).toEqual(SUDDEN_45_V2.criteria);
-      expect(preset.version).toBe(2);
+      expect(preset.geometry).toEqual(SUDDEN_45_V3.geometry);
+      expect(preset.criteria).toEqual(SUDDEN_45_V3.criteria);
+      expect(preset.version).toBe(3);
       expect(preset.id.endsWith(`-v${preset.version}`)).toBe(true);
     }
   });
@@ -259,7 +259,7 @@ describe('custom presets are complete, valid protocols', () => {
     const plan = createSessionPlan({ assignment, seed: 3, sessionId: 'custom-run', previousPresetIds: [], now: new Date('2026-11-14T15:30:00.000Z') });
     const { engine, driver } = runScriptedSession(plan.preset, plan.schedule, (t) => (t.phase === 'adaptation' ? -60 : -20));
     const session = buildSessionRecord(plan, taskResultFrom(engine, 1000, driver.t), null);
-    expect(session.preset.id).toBe('rotation-sudden-60-custom-quick-aevisible-nocatch-v2');
+    expect(session.preset.id).toBe('rotation-sudden-60-custom-quick-aevisible-nocatch-v3');
     expect(session.preset.kind).toBe('custom');
     expect(session.assignment).toMatchObject({ method: 'custom-link', customSettings: settings, conditionConcealed: true });
     expect(session.trials).toHaveLength(16);
@@ -339,7 +339,7 @@ describe('assignment through a custom link', () => {
   it('assigns the custom preset, concealed, and carries the settings needed to rebuild it', () => {
     const a = assignPreset(null, () => 0.9, encodeSettings(settings));
     expect(a).toEqual({
-      presetId: 'rotation-sudden-30-custom-v2',
+      presetId: 'rotation-sudden-30-custom-v3',
       method: 'custom-link',
       linkCode: 'a0hm',
       ignoredLinkCode: null,
@@ -347,36 +347,36 @@ describe('assignment through a custom link', () => {
       customSettings: settings,
     });
     const preset = presetForAssignment(a);
-    expect(preset.id).toBe('rotation-sudden-30-custom-v2');
+    expect(preset.id).toBe('rotation-sudden-30-custom-v3');
     expect(preset.perturbation).toEqual({ kind: 'sudden', angleDeg: 30 });
   });
 
   it('is not affected by the coin', () => {
     for (const coin of [0, 0.49, 0.5, 0.99]) {
-      expect(assignPreset(null, () => coin, 'a0hm').presetId).toBe('rotation-sudden-30-custom-v2');
+      expect(assignPreset(null, () => coin, 'a0hm').presetId).toBe('rotation-sudden-30-custom-v3');
     }
   });
 
   it('a custom code that spells out a canonical preset is recorded as that canonical preset', () => {
     const a = assignPreset(null, () => 0.9, encodeSettings(DEFAULT_SETTINGS));
-    expect(a).toMatchObject({ presetId: 'rotation-sudden-45-v2', method: 'direct-link', customSettings: null });
-    expect(presetForAssignment(a)).toBe(SUDDEN_45_V2);
+    expect(a).toMatchObject({ presetId: 'rotation-sudden-45-v3', method: 'direct-link', customSettings: null });
+    expect(presetForAssignment(a)).toBe(SUDDEN_45_V3);
   });
 
   it('an unreadable custom code falls back to ordinary assignment and is noted, never an error', () => {
     const random = assignPreset(null, () => 0.9, 'a0hn');
-    expect(random).toMatchObject({ presetId: 'rotation-gradual-45-v2', method: 'random-50-50', ignoredLinkCode: 'a0hn', customSettings: null });
+    expect(random).toMatchObject({ presetId: 'rotation-gradual-45-v3', method: 'random-50-50', ignoredLinkCode: 'a0hn', customSettings: null });
     const direct = assignPreset('k7m2', () => 0.9, 'nope');
-    expect(direct).toMatchObject({ presetId: 'rotation-sudden-45-v2', method: 'direct-link', linkCode: 'k7m2', ignoredLinkCode: 'nope' });
+    expect(direct).toMatchObject({ presetId: 'rotation-sudden-45-v3', method: 'direct-link', linkCode: 'k7m2', ignoredLinkCode: 'nope' });
   });
 
   it('a valid custom code takes precedence over a link code in the same address', () => {
-    expect(assignPreset('p4x9', () => 0, 'a0hm').presetId).toBe('rotation-sudden-30-custom-v2');
+    expect(assignPreset('p4x9', () => 0, 'a0hm').presetId).toBe('rotation-sudden-30-custom-v3');
   });
 
   it('refuses to run settings under an id they do not produce', () => {
     const a = assignPreset(null, () => 0, 'a0hm');
-    expect(() => presetForAssignment({ ...a, presetId: 'rotation-sudden-45-v2' })).toThrow(/resolve to/);
+    expect(() => presetForAssignment({ ...a, presetId: 'rotation-sudden-45-v3' })).toThrow(/resolve to/);
   });
 });
 

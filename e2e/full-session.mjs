@@ -56,12 +56,12 @@ function option(name, fallback) {
 const flag = (name) => process.argv.includes(`--${name}`);
 
 const LINKS = {
-  general: { query: '', presetIds: ['rotation-sudden-45-v2', 'rotation-gradual-45-v2'], method: 'random-50-50' },
-  sudden: { query: '?c=k7m2', presetIds: ['rotation-sudden-45-v2'], method: 'direct-link' },
-  gradual: { query: '?c=p4x9', presetIds: ['rotation-gradual-45-v2'], method: 'direct-link' },
-  demo: { query: '?c=demo', presetIds: ['rotation-quickdemo-45-v2'], method: 'direct-link' },
+  general: { query: '', presetIds: ['rotation-sudden-45-v3', 'rotation-gradual-45-v3'], method: 'random-50-50' },
+  sudden: { query: '?c=k7m2', presetIds: ['rotation-sudden-45-v3'], method: 'direct-link' },
+  gradual: { query: '?c=p4x9', presetIds: ['rotation-gradual-45-v3'], method: 'direct-link' },
+  demo: { query: '?c=demo', presetIds: ['rotation-quickdemo-45-v3'], method: 'direct-link' },
   // The query for this one is read from the instructor panel at run time.
-  custom: { query: null, presetIds: ['rotation-sudden-30-custom-quick-aevisible-nocatch-v2'], method: 'custom-link' },
+  custom: { query: null, presetIds: ['rotation-sudden-30-custom-quick-aevisible-nocatch-v3'], method: 'custom-link' },
 };
 
 const linkName = option('link', 'sudden');
@@ -226,6 +226,9 @@ try {
   let hiddenDotShownAfterReach = false;
   let soundToggleOk = null;
   const interruptAtTrial = linkName === 'demo' || linkName === 'custom' ? 7 : 15;
+  /** The one reach made slowly on purpose, to see the speed instruction at work. */
+  const SLOW_TRIAL = 3;
+  let slowNoteShown = false;
 
   for (;;) {
     let seen = await participant.look();
@@ -273,10 +276,14 @@ try {
       soundToggleOk = before === 'true' && muted === 'false' && (await pressed()) === 'true';
     }
 
-    // 1. The outward movement, straight along the participant's current aim.
+    // 1. The outward movement, straight along the participant's current aim. Once, deliberately slowly
+    //    (about a second) to check the speed instruction.
     const aimDeg = learner.aim;
-    await participant.reach(go.targetAngle + aimDeg);
+    await participant.reach(go.targetAngle + aimDeg, trialNumber === SLOW_TRIAL ? { steps: 120 } : {});
+    await sleep(60); // let a frame pass so any note is on screen
     seen = await participant.look();
+    const slowNote = /^Too slow/.test(seen?.message ?? '');
+    if (trialNumber === SLOW_TRIAL) slowNoteShown = slowNote;
 
     // What the participant could see of the outcome: where the dot ended up relative to the target.
     let cursorErrorDeg = null;
@@ -288,7 +295,7 @@ try {
     // 2. Steer the dot onto the target (if it can be seen) and hold until the reach registers.
     seen = await participant.settleOnTarget(go.targetAngle, aimDeg);
     if (!go.cursor.visible && seen && seen.cursor.visible) hiddenDotShownAfterReach = true;
-    log.push({ trialNumber, targetAngle: go.targetAngle, cursorVisible: go.cursor.visible, aimDeg, cursorErrorDeg, registered: !!seen && seen.phase === 'feedback' && seen.targetConfirmed });
+    log.push({ trialNumber, targetAngle: go.targetAngle, cursorVisible: go.cursor.visible, aimDeg, cursorErrorDeg, slowNote, registered: !!seen && seen.phase === 'feedback' && seen.targetConfirmed });
     learner.update(cursorErrorDeg);
 
     if (trialNumber === 3 || trialNumber === 12) {
@@ -309,6 +316,7 @@ try {
   }
   console.log(`  completed ${log.length} trials`);
   check('nothing revealing was shown during the task', !revealedDuringTask);
+  check('a slow reach is followed by "Too slow" on screen', slowNoteShown);
   check('a neutral progress bar was shown', sawProgressBar);
   check('one mid-reach interruption was exercised', interruptionDone);
   check('every reach registered with a visible confirmation', log.every((t) => t.registered), `${log.filter((t) => t.registered).length} of ${log.length}`);
@@ -445,7 +453,7 @@ try {
     return Math.hypot(t.samples.reach.cursorX[n] - t.targetX, t.samples.reach.cursorY[n] - t.targetY) <= session.preset.geometry.targetRadius;
   }));
   check('no movement is recorded after a reach (the dot jumps home)', session.trials.every((t) => t.samples.postReach.tMs.length === 0));
-  check('schema and app are version 2.1', session.schemaVersion === '2.1.0' && session.app.version === '2.1.0');
+  check('schema and app are version 2.2', session.schemaVersion === '2.2.0' && session.app.version === '2.2.0');
 
   // Protocol as executed.
   const phases = (name) => finals.filter((t) => t.phase === name);
@@ -495,6 +503,12 @@ try {
   });
   check('whole-path error of the seen path matches the straight path that was made', worstPath < 2.5, `worst difference ${worstPath.toFixed(2)} units`);
   check('the path-error chart is drawn on the results page', (await page.locator('#path-error-chart .recharts-surface').count()) === 1);
+  // The speed instruction: the verdict follows the recorded movement time, and the note appeared exactly when it was given.
+  const limitMs = session.preset.timing.maxMovementMs;
+  check('the preset asks for quick reaches (500 ms)', limitMs === 500, `${limitMs} ms`);
+  check('every analysed reach has a speed verdict that matches its movement time', finals.every((t) => t.tooSlow === t.metrics.movementDurationMs > limitMs), `${finals.filter((t) => t.tooSlow).length} slow`);
+  check('the deliberately slow reach is recorded as too slow, and still counts', finals[SLOW_TRIAL - 1].tooSlow === true && finals[SLOW_TRIAL - 1].valid && finals[SLOW_TRIAL - 1].holdCompleted, `${finals[SLOW_TRIAL - 1].metrics.movementDurationMs.toFixed(0)} ms`);
+  check('"Too slow" appeared after exactly the reaches recorded as too slow', finals.every((t, i) => t.tooSlow === log[i].slowNote));
   check('the dot seen after the outward movement matched the recorded cursor direction on arrival', finals.every((t, i) => log[i].cursorErrorDeg === null || Math.abs(log[i].cursorErrorDeg - t.metrics.cursor.endpointDirectionErrorDeg) < 0.6));
   // Steering onto the target afterwards must not leak into the metrics: path length stops at arrival.
   check('path metrics stop at arrival, before the steering and the hold', finals.every((t) => t.metrics.hand.pathLength < arrivalRadius * 1.02 && t.crossing.sampleIndex < t.samples.reach.tMs.length));
@@ -527,7 +541,7 @@ try {
     const classTab = await context.newPage();
     await classTab.goto(`${server.url}class/${classCode}`);
     await classTab.getByTestId('class-updated').filter({ hasText: /^Last updated/ }).waitFor({ timeout: 10000 });
-    const seriesKey = session.preset.id === 'rotation-sudden-45-v2' ? 'sudden' : session.preset.id === 'rotation-gradual-45-v2' ? 'gradual' : null;
+    const seriesKey = session.preset.id === 'rotation-sudden-45-v3' ? 'sudden' : session.preset.id === 'rotation-gradual-45-v3' ? 'gradual' : null;
     check('the class view shows the code in capitals', (await classTab.getByTestId('class-code').innerText()) === classCode.toUpperCase());
     check('the class view counts the shared session', Number(await classTab.getByTestId('class-total').innerText()) >= 1, await classTab.getByTestId('class-total').innerText());
     if (seriesKey) {
@@ -555,13 +569,13 @@ try {
   const presetValue = () => instructor.getByLabel('Preset', { exact: true }).inputValue();
   const protocolId = () => instructor.getByTestId('protocol-id').innerText();
   const estimate = () => instructor.getByTestId('duration-estimate').innerText();
-  check('the panel starts on the canonical sudden preset', (await presetValue()) === 'sudden' && (await protocolId()) === 'rotation-sudden-45-v2');
+  check('the panel starts on the canonical sudden preset', (await presetValue()) === 'sudden' && (await protocolId()) === 'rotation-sudden-45-v3');
   check('the duration estimate is shown', /^About 5 minutes/.test(await estimate()), await estimate());
   check('no Custom option before anything is changed', (await instructor.locator('#preset-select option').allInnerTexts()).join('|') === 'Sudden 45°|Gradual 0°→45°|Quick Demo');
   await instructor.screenshot({ path: path.join(outDir, '10-instructor.png'), fullPage: true });
 
   await instructor.getByLabel('30°', { exact: true }).check();
-  check('changing a setting switches the preset to Custom with a new id', (await presetValue()) === 'custom' && (await protocolId()) === 'rotation-sudden-30-custom-v2', await protocolId());
+  check('changing a setting switches the preset to Custom with a new id', (await presetValue()) === 'custom' && (await protocolId()) === 'rotation-sudden-30-custom-v3', await protocolId());
   check('the pooling warning is shown for a custom protocol', /Custom sessions will not be pooled with canonical preset data in class comparisons\./.test(await instructor.getByTestId('custom-warning').innerText()));
   check('a single custom link appears', (await instructor.getByRole('button', { name: 'Copy custom link' }).count()) === 1 && /\?x=[0-9a-z]{4}$/.test(await linkValue(instructor, 'Custom link')), await linkValue(instructor, 'Custom link'));
   await instructor.getByLabel('Extended (64 trials)', { exact: true }).check();
@@ -570,7 +584,7 @@ try {
   await instructor.screenshot({ path: path.join(outDir, '10b-instructor-custom.png'), fullPage: true });
 
   await instructor.getByLabel('Preset', { exact: true }).selectOption('gradual');
-  check('choosing a preset restores its defaults and its canonical id', (await protocolId()) === 'rotation-gradual-45-v2' && (await instructor.getByTestId('custom-warning').count()) === 0);
+  check('choosing a preset restores its defaults and its canonical id', (await protocolId()) === 'rotation-gradual-45-v3' && (await instructor.getByTestId('custom-warning').count()) === 0);
   await instructor.close();
 
   // The address printed for the first release still opens the panel.

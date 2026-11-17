@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildClassSubmission, fullRotationDeg, tierOfPreset } from './classShare';
 import { parseSubmission } from './classWire';
-import { ALL_PRESETS, GRADUAL_45_V2, QUICK_DEMO_45_V2, SUDDEN_45_V2 } from './presets';
+import { ALL_PRESETS, GRADUAL_45_V3, QUICK_DEMO_45_V3, SUDDEN_45_V3 } from './presets';
 import { finalAttempts, type SessionRecord } from './record';
 import type { TrialSpec } from './schedule';
 import { scriptedSessionRecord } from './testUtils';
@@ -48,12 +48,12 @@ describe('buildClassSubmission', () => {
 
   it('labels the protocol: preset id, full rotation and length tier', () => {
     expect(buildClassSubmission(session('k7m2'), 'X', NOW)).toMatchObject({
-      presetId: SUDDEN_45_V2.id,
+      presetId: SUDDEN_45_V3.id,
       rotationDeg: 45,
       trialTier: 'standard',
     });
-    expect(buildClassSubmission(session('p4x9'), 'X', NOW)).toMatchObject({ presetId: GRADUAL_45_V2.id, rotationDeg: 45 });
-    expect(buildClassSubmission(session('demo'), 'X', NOW)).toMatchObject({ presetId: QUICK_DEMO_45_V2.id, trialTier: 'quick' });
+    expect(buildClassSubmission(session('p4x9'), 'X', NOW)).toMatchObject({ presetId: GRADUAL_45_V3.id, rotationDeg: 45 });
+    expect(buildClassSubmission(session('demo'), 'X', NOW)).toMatchObject({ presetId: QUICK_DEMO_45_V3.id, trialTier: 'quick' });
   });
 
   it('carries the strategy answer only, and null when there is none', () => {
@@ -93,6 +93,6 @@ describe('protocol labels', () => {
       expect(Number.isInteger(fullRotationDeg(preset))).toBe(true);
       expect(['quick', 'standard', 'extended']).toContain(tierOfPreset(preset));
     }
-    expect(fullRotationDeg(GRADUAL_45_V2)).toBe(45);
+    expect(fullRotationDeg(GRADUAL_45_V3)).toBe(45);
   });
 });

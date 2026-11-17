@@ -7,7 +7,7 @@
  *   - If the settings are exactly those of a shipped preset, that preset is
  *     returned UNCHANGED, with its canonical id.
  *   - Otherwise a new preset is built with `kind: 'custom'` and an id derived
- *     from the settings, such as `rotation-sudden-30-custom-v2`.
+ *     from the settings, such as `rotation-sudden-30-custom-v3`.
  *
  * CANONICAL PROTECTION. A canonical id can therefore never label anything but
  * the canonical protocol, and a custom session can never be mistaken for one:
@@ -27,14 +27,14 @@
  */
 
 import {
-  GRADUAL_45_V2,
-  QUICK_DEMO_45_V2,
+  GRADUAL_45_V3,
+  QUICK_DEMO_45_V3,
   QUICK_STRUCTURE,
   STANDARD_CRITERIA,
   STANDARD_GEOMETRY,
   STANDARD_STRUCTURE,
   STANDARD_TIMING,
-  SUDDEN_45_V2,
+  SUDDEN_45_V3,
   totalTrials,
   validatePreset,
   type FeedbackMode,
@@ -131,17 +131,17 @@ export interface NamedPreset {
 }
 
 export const NAMED_PRESETS: readonly NamedPreset[] = Object.freeze([
-  { key: 'sudden', name: 'Sudden 45°', preset: SUDDEN_45_V2, settings: DEFAULT_SETTINGS },
+  { key: 'sudden', name: 'Sudden 45°', preset: SUDDEN_45_V3, settings: DEFAULT_SETTINGS },
   {
     key: 'gradual',
     name: 'Gradual 0°→45°',
-    preset: GRADUAL_45_V2,
+    preset: GRADUAL_45_V3,
     settings: { schedule: 'gradual', angleDeg: 45, tier: 'standard', aftereffect: 'hidden', catchTrials: true },
   },
   {
     key: 'quick-demo',
     name: 'Quick Demo',
-    preset: QUICK_DEMO_45_V2,
+    preset: QUICK_DEMO_45_V3,
     settings: { schedule: 'sudden', angleDeg: 45, tier: 'quick', aftereffect: 'hidden', catchTrials: true },
   },
 ]);
@@ -165,15 +165,15 @@ export function matchNamedPreset(settings: InstructorSettings): NamedPreset | nu
 // Building a preset from settings
 // ---------------------------------------------------------------------------
 
-/** Trial-rule generation of custom presets: the same hold-to-complete rules as the v2 shipped presets. */
-export const CUSTOM_VERSION = 2;
+/** Trial-rule generation of custom presets: the same rules (target hold, speed instruction) as the v3 shipped presets. */
+export const CUSTOM_VERSION = 3;
 
 /**
  * Identifier of the custom preset for these settings. Every setting that
  * differs from the standard defaults leaves a mark, so two different custom
  * protocols never share an id and data from them is never pooled:
  *
- *   rotation-<schedule>-<angle>-custom[-quick|-extended][-aevisible][-nocatch]-v2
+ *   rotation-<schedule>-<angle>-custom[-quick|-extended][-aevisible][-nocatch]-v3
  *
  * It always contains "-custom-", which no shipped preset id does.
  */

@@ -49,6 +49,11 @@
  * between samples. All reach metrics are measured up to that point, so they do
  * not depend on how long the participant took to settle and hold.
  *
+ * SPEED (v3). At arrival, if the movement from onset took longer than
+ * `timing.maxMovementMs`, the attempt is flagged `tooSlow` and the view carries
+ * the "too-slow" notice until the next target appears. Nothing else changes:
+ * the reach still has to register and still counts.
+ *
  * Four rules keep the transformation honest:
  *   1. ANCHOR AT GO: when the target appears, the virtual hand and the cursor
  *      are both reset to the exact start position, so the rotation always
@@ -83,6 +88,7 @@ import {
 } from './geometry';
 import {
   arrivalRadius,
+  isTooSlow,
   targetHoldMsOf,
   type FeedbackMode,
   type MovementCriteria,
@@ -113,7 +119,14 @@ export type ReachOutcome = 'completed' | 'timeout' | 'interrupted';
 
 export type InterruptReason = 'pointer-lock-lost' | 'window-blur' | 'tab-hidden';
 
-export type EngineNotice = 'timeout';
+/**
+ * A short note for the participant, shown until the next target appears:
+ *   timeout   the time limit ran out before the reach registered
+ *   too-slow  the movement broke the speed instruction (`timing.maxMovementMs`);
+ *             the reach still counts
+ * Both are the same in every condition, so they reveal nothing about the design.
+ */
+export type EngineNotice = 'timeout' | 'too-slow';
 
 export interface EngineConfig {
   geometry: TaskGeometry;
@@ -197,6 +210,13 @@ export interface AttemptRecord<T extends EngineTrial = EngineTrial> {
   outcome: ReachOutcome;
   /** True when the target zone was held for long enough, i.e. the reach registered. */
   holdCompleted: boolean;
+  /**
+   * True when the movement (onset → arrival) took longer than the speed
+   * instruction allows and the participant was told "Too slow"; false when it
+   * was quick enough; null when the preset has no speed instruction or the
+   * hand never arrived.
+   */
+  tooSlow: boolean | null;
   /** The rotation actually used in the cursor transformation on this attempt. */
   appliedRotationDeg: number;
   cursorVisibleDuringReach: boolean;
@@ -260,6 +280,7 @@ interface AttemptBuffer {
   reachEndMs: number | null;
   outcome: ReachOutcome | null;
   holdCompleted: boolean;
+  tooSlow: boolean | null;
   appliedRotationDeg: number;
   cursorVisible: boolean;
   /** Centre of this trial's target. */
@@ -542,6 +563,7 @@ export class TrialEngine<T extends EngineTrial = EngineTrial> {
       reachEndMs: null,
       outcome: null,
       holdCompleted: false,
+      tooSlow: null,
       appliedRotationDeg: trial.rotationDeg,
       cursorVisible: visible,
       target: targetPosition(trial.targetAngleDeg, this.config.geometry.targetDistance),
@@ -598,6 +620,7 @@ export class TrialEngine<T extends EngineTrial = EngineTrial> {
     const crossingT = prevT + f * (t - prevT);
     const crossingCursor = applyCursorTransform(crossingHand, ZERO, cur.appliedRotationDeg);
     cur.completionMs = crossingT;
+    this.noteSpeed();
     cur.crossing = {
       tMs: crossingT,
       handX: crossingHand.x,
@@ -607,6 +630,19 @@ export class TrialEngine<T extends EngineTrial = EngineTrial> {
       radius: this.arrivalR,
       sampleIndex: cur.reach.tMs.length - 1,
     };
+  }
+
+  /**
+   * Speed instruction: on arrival, compare the movement time (onset → arrival)
+   * with `timing.maxMovementMs`. A slow reach gets the "too slow" notice, which
+   * stays up until the next target appears; the reach itself counts as usual.
+   */
+  private noteSpeed(): void {
+    const cur = this.current!;
+    const onset = cur.movementOnsetMs ?? cur.goCueMs;
+    if (cur.completionMs === null || onset === null) return;
+    cur.tooSlow = isTooSlow(this.config.timing, cur.completionMs - onset);
+    if (cur.tooSlow) this.notice = 'too-slow';
   }
 
   /** Is the target zone occupied right now? (See the header for the two zones.) */
@@ -649,6 +685,7 @@ export class TrialEngine<T extends EngineTrial = EngineTrial> {
       const i = cur.reach.tMs.length - 1;
       const cursor = applyCursorTransform(this.hand, ZERO, cur.appliedRotationDeg);
       cur.completionMs = cur.reach.tMs[i];
+      this.noteSpeed();
       cur.crossing = {
         tMs: cur.reach.tMs[i],
         handX: this.hand.x,
@@ -691,6 +728,7 @@ export class TrialEngine<T extends EngineTrial = EngineTrial> {
       attempt: this.attempt,
       outcome: cur.outcome!,
       holdCompleted: cur.holdCompleted,
+      tooSlow: cur.tooSlow,
       appliedRotationDeg: cur.appliedRotationDeg,
       cursorVisibleDuringReach: cur.cursorVisible,
       startAnchorOffset: cur.startAnchorOffset,

@@ -174,7 +174,15 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
                   <td className="num">{m?.hand ? m.hand.pathEfficiency.toFixed(3) : ''}</td>
                   <td className="num">{m?.reactionTimeMs != null ? Math.round(m.reactionTimeMs) : ''}</td>
                   <td className="num">{m?.movementDurationMs != null ? Math.round(m.movementDurationMs) : ''}</td>
-                  <td>{p.valid ? '' : p.invalidReason === 'timeout' ? 'timed out short of the target' : (p.invalidReason ?? '')}</td>
+                  <td>
+                    {!p.valid
+                      ? p.invalidReason === 'timeout'
+                        ? 'timed out short of the target'
+                        : (p.invalidReason ?? '')
+                      : p.tooSlow
+                        ? 'too slow'
+                        : ''}
+                  </td>
                 </tr>
               );
             })}

@@ -80,6 +80,8 @@ export interface TrialPoint {
   compensationDeg: number;
   /** Whole-path error of the path the participant saw, in % of the target distance (see `seenPathError`). */
   pathErrorPct: number | null;
+  /** The movement broke the speed instruction ("Too slow" was shown); null without one. */
+  tooSlow: boolean | null;
 }
 
 /** The whole-path error of the path the participant saw (% of the target distance); see core/record.ts. */
@@ -103,6 +105,8 @@ export function trialPoints(session: SessionRecord): TrialPoint[] {
     // `0 - x` rather than `-x` so a zero rotation gives 0, not −0.
     compensationDeg: 0 - t.appliedRotationDeg,
     pathErrorPct: seenPathError(t, D),
+    // `?? null`: files written before schema 2.2 have no such field.
+    tooSlow: t.tooSlow ?? null,
   }));
 }
 

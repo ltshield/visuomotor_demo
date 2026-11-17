@@ -7,7 +7,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { SUDDEN_45_V2 } from '../core/presets';
+import { SUDDEN_45_V3 } from '../core/presets';
 import { generateSchedule } from '../core/schedule';
 import { getPointerInput } from '../input/pointerLock';
 import { getSoundCues } from './sound';
@@ -25,8 +25,8 @@ afterEach(() => {
 });
 
 function renderTask() {
-  const schedule = generateSchedule(SUDDEN_45_V2, 9);
-  const view = render(<TaskScreen preset={SUDDEN_45_V2} schedule={schedule} onComplete={() => {}} onQuit={() => {}} />);
+  const schedule = generateSchedule(SUDDEN_45_V3, 9);
+  const view = render(<TaskScreen preset={SUDDEN_45_V3} schedule={schedule} onComplete={() => {}} onQuit={() => {}} />);
   const root = view.container.querySelector('.task') as HTMLElement;
   const dot = view.container.querySelector('.cursor-dot') as SVGCircleElement;
   return { ...view, root, dot, phase: () => root.getAttribute('data-engine-phase') };

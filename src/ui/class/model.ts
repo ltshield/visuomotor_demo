@@ -18,7 +18,7 @@
  */
 
 import type { ClassSession, WirePhase, WireTrial } from '../../core/classWire';
-import { GRADUAL_45_V2, SUDDEN_45_V2 } from '../../core/presets';
+import { GRADUAL_45_V3, SUDDEN_45_V3 } from '../../core/presets';
 
 /** Most individual lines drawn per series; the mean and band always use every session. */
 export const MAX_LINES_PER_SERIES = 60;
@@ -185,8 +185,8 @@ export function buildClassModel(sessions: readonly ClassSession[], metric: Class
     byPreset.set(s.presetId, list);
   }
 
-  const sudden = byPreset.get(SUDDEN_45_V2.id) ?? [];
-  const gradual = byPreset.get(GRADUAL_45_V2.id) ?? [];
+  const sudden = byPreset.get(SUDDEN_45_V3.id) ?? [];
+  const gradual = byPreset.get(GRADUAL_45_V3.id) ?? [];
   const standardLayout = layoutOf([...sudden, ...gradual]);
   // With nobody in yet, still draw the standard 40-trial frame so the projector shows an empty chart, not nothing.
   const standardTrials = standardLayout.trialCount || 40;
@@ -196,8 +196,8 @@ export function buildClassModel(sessions: readonly ClassSession[], metric: Class
     label: 'Standard versions: sudden and gradual',
     standard: true,
     series: [
-      buildSeries('sudden', SUDDEN_45_V2.id, 'Sudden 45°', 0, sudden, standardTrials, metric),
-      buildSeries('gradual', GRADUAL_45_V2.id, 'Gradual 0°→45°', 1, gradual, standardTrials, metric),
+      buildSeries('sudden', SUDDEN_45_V3.id, 'Sudden 45°', 0, sudden, standardTrials, metric),
+      buildSeries('gradual', GRADUAL_45_V3.id, 'Gradual 0°→45°', 1, gradual, standardTrials, metric),
     ],
     trialCount: standardTrials,
     catchTrials: standardLayout.trialCount > 0 ? standardLayout.catchTrials : [20, 28],
@@ -213,7 +213,7 @@ export function buildClassModel(sessions: readonly ClassSession[], metric: Class
   };
 
   const others: ClassViewModel[] = [...byPreset.entries()]
-    .filter(([presetId]) => presetId !== SUDDEN_45_V2.id && presetId !== GRADUAL_45_V2.id)
+    .filter(([presetId]) => presetId !== SUDDEN_45_V3.id && presetId !== GRADUAL_45_V3.id)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([presetId, list]) => {
       const layout = layoutOf(list);

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { TrialEngine, type EngineConfig, type EngineTrial } from './engine';
 import { norm, targetPosition, type Vec2 } from './geometry';
-import { SUDDEN_45_V2, arrivalRadius } from './presets';
+import { SUDDEN_45_V3, arrivalRadius } from './presets';
 import { generateSchedule, type TrialSpec } from './schedule';
 import { EngineDriver, engineConfigFor, runScriptedSession } from './testUtils';
 
-const preset = SUDDEN_45_V2;
+const preset = SUDDEN_45_V3;
 const baseConfig = engineConfigFor(preset);
 const D = preset.geometry.targetDistance;
 const TARGET_R = preset.geometry.targetRadius;
@@ -35,11 +35,82 @@ function setup(
   return { engine, driver: new EngineDriver(engine, config, 0, trials), config };
 }
 
-describe('the v2 preset asks for a target hold', () => {
+describe('the current preset asks for a target hold', () => {
   it('uses a 400 ms hold and an arrival radius at the near edge of the target', () => {
     expect(targetHoldMs).toBe(400);
     expect(R).toBe(D - TARGET_R);
     expect(R).toBe(222);
+  });
+});
+
+describe('the speed instruction (v3)', () => {
+  const limit = preset.timing.maxMovementMs!;
+  // The driver's reach covers 1.04·D at constant speed, so onset (5% of D) → arrival (R) takes this long:
+  const movementMs = (durationMs: number) => (durationMs * (R - 0.05 * D)) / (1.04 * D);
+
+  it('a quick reach is not flagged and shows no note', () => {
+    expect(movementMs(300)).toBeLessThan(limit);
+    const { engine, driver } = setup([trial(), trial()]);
+    driver.center();
+    driver.reach(0);
+    expect(engine.getView().notice).toBeNull();
+    driver.settle();
+    driver.finishFeedback();
+    expect(engine.getRecords()[0].tooSlow).toBe(false);
+    expect(engine.getView().notice).toBeNull();
+  });
+
+  it('a slow reach is flagged, and "too-slow" shows from arrival until the next target lights', () => {
+    expect(movementMs(900)).toBeGreaterThan(limit);
+    const { engine, driver } = setup([trial(), trial()]);
+    driver.center();
+    driver.reach(0, { durationMs: 900 });
+    expect(engine.getView().phase).toBe('reach');
+    expect(engine.getView().notice).toBe('too-slow');
+    driver.settle();
+    driver.finishFeedback();
+    const record = engine.getRecords()[0];
+    expect(record.tooSlow).toBe(true);
+    // It still counts: the reach registered as usual.
+    expect(record.outcome).toBe('completed');
+    expect(record.holdCompleted).toBe(true);
+    // Still up while the next reach is being centred...
+    expect(engine.getView().phase).not.toBe('reach');
+    expect(engine.getView().notice).toBe('too-slow');
+    // ...and gone once the next target lights.
+    driver.center();
+    expect(engine.getView().phase).toBe('reach');
+    expect(engine.getView().notice).toBeNull();
+  });
+
+  it('times the movement only: a long wait before moving is not "too slow"', () => {
+    const { engine, driver } = setup([trial(), trial()]);
+    driver.center();
+    driver.wait(2000);
+    driver.reach(0);
+    driver.settle();
+    driver.finishFeedback();
+    expect(engine.getRecords()[0].tooSlow).toBe(false);
+  });
+
+  it('gives no verdict without a speed instruction (v2 timing)', () => {
+    const { engine, driver } = setup([trial(), trial()], { timing: { maxMovementMs: undefined } });
+    driver.center();
+    driver.reach(0, { durationMs: 2000 });
+    expect(engine.getView().notice).toBeNull();
+    driver.settle();
+    driver.finishFeedback();
+    expect(engine.getRecords()[0].tooSlow).toBeNull();
+  });
+
+  it('is the same on hidden-cursor reaches, so it reveals nothing about the design', () => {
+    const { engine, driver } = setup([trial({ feedback: 'hidden' }), trial()]);
+    driver.center();
+    driver.reach(0, { durationMs: 900 });
+    expect(engine.getView().notice).toBe('too-slow');
+    driver.settle();
+    driver.finishFeedback();
+    expect(engine.getRecords()[0].tooSlow).toBe(true);
   });
 });
 
@@ -1004,8 +1075,8 @@ describe('concealment: what the renderer is told', () => {
   });
 
   it('runs a full 40-trial session and never leaks design words or announces a phase change', () => {
-    const schedule = generateSchedule(SUDDEN_45_V2, 5);
-    const config = engineConfigFor(SUDDEN_45_V2);
+    const schedule = generateSchedule(SUDDEN_45_V3, 5);
+    const config = engineConfigFor(SUDDEN_45_V3);
     const engine = new TrialEngine<TrialSpec>(schedule, config, { startTimeMs: 0 });
     const driver = new EngineDriver(engine, config, 0, schedule);
     const atGo: Array<{ trialNumber: number; snapshot: string }> = [];
@@ -1040,8 +1111,8 @@ describe('concealment: what the renderer is told', () => {
   });
 
   it('applies and records the scheduled rotation on every trial of a full session', () => {
-    const schedule = generateSchedule(SUDDEN_45_V2, 8);
-    const { engine } = runScriptedSession(SUDDEN_45_V2, schedule, () => 0);
+    const schedule = generateSchedule(SUDDEN_45_V3, 8);
+    const { engine } = runScriptedSession(SUDDEN_45_V3, schedule, () => 0);
     const records = engine.getRecords();
     expect(records).toHaveLength(40);
     records.forEach((r, i) => {
@@ -1062,9 +1133,9 @@ describe('concealment: what the renderer is told', () => {
   it('a participant with a large aftereffect completes every hidden-cursor reach', () => {
     // 40° clockwise of every target with the cursor hidden: exactly the case the
     // direction-free hidden zone exists for.
-    const schedule = generateSchedule(SUDDEN_45_V2, 12);
+    const schedule = generateSchedule(SUDDEN_45_V3, 12);
     const aim = (t: TrialSpec) => (t.phase === 'adaptation' ? -45 : -40);
-    const { engine } = runScriptedSession(SUDDEN_45_V2, schedule, aim);
+    const { engine } = runScriptedSession(SUDDEN_45_V3, schedule, aim);
     const hiddenRecords = engine.getRecords().filter((r) => !r.cursorVisibleDuringReach);
     expect(hiddenRecords).toHaveLength(16);
     for (const r of hiddenRecords) {

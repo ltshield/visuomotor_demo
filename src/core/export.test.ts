@@ -76,7 +76,7 @@ describe('session JSON', () => {
   const parsed = JSON.parse(text) as SessionRecord;
 
   it('is valid JSON containing the whole session', () => {
-    expect(parsed.schemaVersion).toBe('2.1.0');
+    expect(parsed.schemaVersion).toBe('2.2.0');
     expect(parsed.sessionId).toBe('export-test');
     expect(parsed.preset).toEqual(session.preset);
     expect(parsed.assignment).toEqual(session.assignment);
@@ -159,8 +159,8 @@ describe('trial-level CSV', () => {
   it('carries the preset id, version and assignment on every row', () => {
     for (const row of rows) {
       expect(row.session_id).toBe('export-test');
-      expect(row.preset_id).toBe('rotation-gradual-45-v2');
-      expect(row.preset_version).toBe('2');
+      expect(row.preset_id).toBe('rotation-gradual-45-v3');
+      expect(row.preset_version).toBe('3');
       expect(row.assignment_method).toBe('direct-link');
       expect(row.condition_concealed).toBe('true');
       expect(row.seed).toBe('99');
@@ -239,7 +239,7 @@ describe('trial-level CSV', () => {
   it('quotes text that contains commas or quotes', () => {
     const tricky = buildSession('id,with "quotes"');
     const firstDataLine = trialsToCsv(tricky).split('\n')[1];
-    expect(firstDataLine.startsWith('"id,with ""quotes""",rotation-gradual-45-v2,')).toBe(true);
+    expect(firstDataLine.startsWith('"id,with ""quotes""",rotation-gradual-45-v3,')).toBe(true);
   });
 });
 
@@ -330,9 +330,9 @@ describe('per-sample (event) CSV', () => {
 describe('export file names', () => {
   it('include the preset id and the session time', () => {
     expect(exportFileNames(session)).toEqual({
-      json: 'motor-learning_rotation-gradual-45-v2_20261114-1530_session.json',
-      trialsCsv: 'motor-learning_rotation-gradual-45-v2_20261114-1530_trials.csv',
-      eventsCsv: 'motor-learning_rotation-gradual-45-v2_20261114-1530_events.csv',
+      json: 'motor-learning_rotation-gradual-45-v3_20261114-1530_session.json',
+      trialsCsv: 'motor-learning_rotation-gradual-45-v3_20261114-1530_trials.csv',
+      eventsCsv: 'motor-learning_rotation-gradual-45-v3_20261114-1530_events.csv',
     });
   });
 });

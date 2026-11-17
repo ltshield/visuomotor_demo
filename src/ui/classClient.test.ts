@@ -13,7 +13,7 @@ const html = (status = 200) => new Response('<!doctype html><title>app</title>',
 const submission: ClassSubmission = {
   sessionId: '6f1c2a9e-3b7d-4c10-9a55-0e2f8d7b6a41',
   classCode: 'neuro451',
-  presetId: 'rotation-sudden-45-v2',
+  presetId: 'rotation-sudden-45-v3',
   rotationDeg: 45,
   trialTier: 'standard',
   submittedAt: '2026-11-17T18:45:00.000Z',

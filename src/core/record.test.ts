@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assignPreset } from './assignment';
 import { TrialEngine } from './engine';
 import { norm } from './geometry';
-import { GRADUAL_45_V2, SUDDEN_45_V2 } from './presets';
+import { GRADUAL_45_V3, SUDDEN_45_V3 } from './presets';
 import { SCHEMA_VERSION, buildSessionRecord, finalAttempts, reachDataOf, withReflection } from './record';
 import { generateSchedule, type TrialSpec } from './schedule';
 import { createSessionPlan, type SessionPlan } from './session';
@@ -32,20 +32,20 @@ describe('buildSessionRecord: session-level fields', () => {
 
   it('identifies the app, schema, preset and assignment', () => {
     expect(session.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(session.app).toEqual({ name: 'visuomotor-learning-lab', version: '2.1.0' });
-    expect(session.schemaVersion).toBe('2.1.0');
+    expect(session.app).toEqual({ name: 'visuomotor-learning-lab', version: '2.2.0' });
+    expect(session.schemaVersion).toBe('2.2.0');
     expect(session.sessionId).toBe('test-session');
-    expect(session.preset).toEqual(SUDDEN_45_V2);
-    expect(session.preset.id).toBe('rotation-sudden-45-v2');
-    expect(session.preset.version).toBe(2);
-    expect(session.assignment).toMatchObject({ method: 'direct-link', presetId: 'rotation-sudden-45-v2' });
+    expect(session.preset).toEqual(SUDDEN_45_V3);
+    expect(session.preset.id).toBe('rotation-sudden-45-v3');
+    expect(session.preset.version).toBe(3);
+    expect(session.assignment).toMatchObject({ method: 'direct-link', presetId: 'rotation-sudden-45-v3' });
     expect(session.runNumber).toBe(1);
     expect(session.previousPresetIds).toEqual([]);
   });
 
   it('saves the seed and the exact schedule it produced', () => {
     expect(session.seed).toBe(77);
-    expect(session.schedule).toEqual(generateSchedule(SUDDEN_45_V2, 77));
+    expect(session.schedule).toEqual(generateSchedule(SUDDEN_45_V3, 77));
     expect(session.schedule.map((t) => t.targetIndex)).toEqual(finalAttempts(session).map((t) => t.targetIndex));
   });
 
@@ -90,7 +90,7 @@ describe('buildSessionRecord: session-level fields', () => {
 describe('buildSessionRecord: every trial records the required data', () => {
   for (const code of ['k7m2', 'p4x9'] as const) {
     const session = cleanSession(code);
-    const preset = code === 'k7m2' ? SUDDEN_45_V2 : GRADUAL_45_V2;
+    const preset = code === 'k7m2' ? SUDDEN_45_V3 : GRADUAL_45_V3;
 
     it(`${preset.id}: one final attempt per scheduled trial, matching the schedule`, () => {
       expect(session.trials).toHaveLength(40);

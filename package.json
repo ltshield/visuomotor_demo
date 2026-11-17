@@ -1,7 +1,7 @@
 {
   "name": "visuomotor-learning-lab",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Discovery-based visuomotor learning lab: a 5-10 minute browser reaching activity for undergraduate neuromechanics.",
   "type": "module",
   "engines": {

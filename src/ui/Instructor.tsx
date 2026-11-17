@@ -37,9 +37,9 @@ import {
 } from '../core/custom';
 import {
   CANONICAL_PRESETS,
-  GRADUAL_45_V2,
-  QUICK_DEMO_45_V2,
-  SUDDEN_45_V2,
+  GRADUAL_45_V3,
+  QUICK_DEMO_45_V3,
+  SUDDEN_45_V3,
   arrivalRadius,
   perturbedReachCount,
   targetHoldMsOf,
@@ -250,19 +250,19 @@ function LinksPanel({ settings, base }: { settings: InstructorSettings; base: st
       />
       <CopyableLink
         title="Sudden 45° link"
-        detail={`Every student who opens it gets ${SUDDEN_45_V2.id}.`}
-        url={buildParticipantLink(base, SUDDEN_45_V2.id)}
+        detail={`Every student who opens it gets ${SUDDEN_45_V3.id}.`}
+        url={buildParticipantLink(base, SUDDEN_45_V3.id)}
       />
       <CopyableLink
         title="Gradual 0°→45° link"
-        detail={`Every student who opens it gets ${GRADUAL_45_V2.id}.`}
-        url={buildParticipantLink(base, GRADUAL_45_V2.id)}
+        detail={`Every student who opens it gets ${GRADUAL_45_V3.id}.`}
+        url={buildParticipantLink(base, GRADUAL_45_V3.id)}
       />
-      {preset.id === QUICK_DEMO_45_V2.id && (
+      {preset.id === QUICK_DEMO_45_V3.id && (
         <CopyableLink
           title="Quick Demo link"
           detail="The 16-reach version selected above. Labelled as a demo for the student; not pooled with the standard versions."
-          url={buildParticipantLink(base, QUICK_DEMO_45_V2.id)}
+          url={buildParticipantLink(base, QUICK_DEMO_45_V3.id)}
         />
       )}
       {preset.kind === 'custom' && (
@@ -431,8 +431,8 @@ export function Instructor() {
   const [settings, setSettings] = useState<InstructorSettings>({ ...DEFAULT_SETTINGS });
   const origin = window.location.origin;
   const base = `${origin}/`;
-  const g = SUDDEN_45_V2.geometry;
-  const t = SUDDEN_45_V2.timing;
+  const g = SUDDEN_45_V3.geometry;
+  const t = SUDDEN_45_V3.timing;
   const holdMs = targetHoldMsOf(t);
   const arrival = arrivalRadius(g, t);
   const selected = resolvePreset(settings);
@@ -491,10 +491,10 @@ export function Instructor() {
           <PresetDefinition key={p.id} preset={p} />
         ))}
 
-        {selected.id !== QUICK_DEMO_45_V2.id && (
+        {selected.id !== QUICK_DEMO_45_V3.id && (
           <>
             <h2>Optional short version</h2>
-            <PresetDefinition preset={QUICK_DEMO_45_V2} />
+            <PresetDefinition preset={QUICK_DEMO_45_V3} />
           </>
         )}
 
@@ -524,6 +524,14 @@ export function Instructor() {
               then the cursor jumps straight back to the center. Students never steer back, and after a hidden-cursor
               reach they never see where it ended.
             </li>
+            {t.maxMovementMs !== undefined && (
+              <li data-testid="speed-rule">
+                <strong>Quick reaches.</strong> Students are asked for one quick, smooth movement per reach. If the
+                movement from its start to arriving at the target takes longer than {t.maxMovementMs} ms, “Too slow”
+                appears until the next target lights. The reach still counts and is analysed. Slow reaches leave time
+                to steer the cursor back mid-reach, which hides changes in aim and makes catch trials look unchanged.
+              </li>
+            )}
             <li>
               <strong>What is measured.</strong> Every reach metric runs from the moment the target lights to the
               hand’s first arrival at {arrival} units from the center (the near edge of the target). Settling onto the
@@ -591,7 +599,7 @@ export function Instructor() {
           <ul className="plain-list">
             <li>
               These are teaching defaults, not optimized research protocols. With only{' '}
-              {perturbedReachCount(SUDDEN_45_V2.structure)} rotated reaches, an individual student may show little or
+              {perturbedReachCount(SUDDEN_45_V3.structure)} rotated reaches, an individual student may show little or
               no measurable learning or aftereffect.
             </li>
             <li>One student’s data cannot establish a difference between the sudden and gradual versions.</li>

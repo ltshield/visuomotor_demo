@@ -45,13 +45,14 @@ type LockState = 'pending' | 'locked' | 'unlocked';
 export const TASK_MESSAGES = {
   '': '',
   'center-first': 'Move the white dot into the ring at the center and hold it still.',
-  'reach-first': 'A target lit up. Move the dot onto it and hold it there until the target flashes.',
+  'reach-first': 'A target lit up. Move the dot onto it in one quick, smooth movement, then hold it there until the target flashes.',
   center: 'The dot jumps back to the center after every reach. Keep it still in the ring until the next target lights up.',
-  reach: 'Move the dot onto the lit target and hold it there until it flashes.',
+  reach: 'Move the dot onto the lit target in one quick, smooth movement, then hold it there until it flashes.',
   'hidden-intro':
-    'Next, the dot will disappear while you reach. That is expected: reach out to the lit target anyway and hold still until it flashes. The dot comes back afterwards.',
-  'hidden-reach': 'The dot is hidden. Reach out to the lit target anyway, then hold still until it flashes.',
+    'Next, the dot will disappear while you reach. That is expected: reach out to the lit target anyway, quickly, and hold still until it flashes. The dot comes back afterwards.',
+  'hidden-reach': 'The dot is hidden. Reach out to the lit target anyway in one quick movement, then hold still until it flashes.',
   timeout: 'Time ran out on that reach. Move all the way out to the lit target and hold still there until it flashes.',
+  'too-slow': 'Too slow. Make the next reach one quick, smooth movement.',
 } as const;
 type MessageKey = keyof typeof TASK_MESSAGES;
 
@@ -171,6 +172,7 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
     const practiceMessage = (view: EngineView): MessageKey => {
       if (view.phase === 'feedback') return shownMessage; // leave the current line up during the pause
       if (view.notice === 'timeout' && view.phase !== 'reach') return 'timeout';
+      if (view.notice === 'too-slow') return 'too-slow';
       const index = view.trialsCompleted;
       const hidden = practiceTrials[index]?.feedback === 'hidden';
       if (view.phase === 'reach') return hidden ? 'hidden-reach' : index === 0 ? 'reach-first' : 'reach';
@@ -311,8 +313,11 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
           showMessage('');
         }
       } else if (stageNow === 'experiment') {
-        // The only text ever shown during the recorded part is this recovery hint.
-        showMessage(view.notice === 'timeout' && view.phase !== 'reach' ? 'timeout' : '');
+        // The only text ever shown during the recorded part: the time-out hint
+        // and the speed reminder. Both are the same in every condition.
+        showMessage(
+          view.notice === 'timeout' && view.phase !== 'reach' ? 'timeout' : view.notice === 'too-slow' ? 'too-slow' : '',
+        );
         if (view.phase === 'finished') finishExperiment(now);
       }
     };

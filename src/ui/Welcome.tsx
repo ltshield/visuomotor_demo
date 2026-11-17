@@ -98,6 +98,11 @@ export function Welcome({ quickDemo, tier = quickDemo ? 'quick' : 'standard', on
             it there; it then jumps back to the center for the next one.
           </li>
           <li>
+            Make each reach <strong>one quick, smooth movement</strong>, like a flick of the wrist, rather than a slow,
+            careful one. You will see “Too slow” after a reach that took too long; just go a little quicker on the
+            next one.
+          </li>
+          <li>
             At times the dot may behave differently, or disappear while you move. That is part of the activity, not a
             malfunction. Just keep going.
           </li>

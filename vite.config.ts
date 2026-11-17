@@ -3,8 +3,9 @@
  *
  * `base: '/'`: the site is served from the root of its domain. That is what
  * lets `/instructor` and `/class/<CODE>` be real addresses: on such a path a
- * relative asset URL would resolve under `/class/` and fail to load. (To host
- * under a sub-folder instead, set `base` to that folder, e.g. '/lab/'.)
+ * relative asset URL would resolve under `/class/` and fail to load. Hosting
+ * under a sub-folder is NOT supported as things stand: changing `base` alone
+ * is not enough, because the app's own links and routes assume the root.
  */
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';

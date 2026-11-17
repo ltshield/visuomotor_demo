@@ -247,11 +247,6 @@ interface TrialRow {
 }
 
 /**
- * Return every session stored for a class code. An unknown or empty class is
- * not an error: it returns an empty list, since "nobody has shared yet" is the
- * normal state of a class view before the activity starts.
- */
-/**
  * The version tag (ETag) of a class's data. It changes whenever a session is
  * added, replaced or deleted, because it is built from the count and the latest
  * receive time. It is a hash of those, so the tag itself does not give out the
@@ -263,6 +258,11 @@ async function versionTag(classCode: string, total: number, latest: string | nul
   return `"${[...digest.slice(0, 12)].map((b) => b.toString(16).padStart(2, '0')).join('')}"`;
 }
 
+/**
+ * Return every session stored for a class code. An unknown or empty class is
+ * not an error: it returns an empty list, since "nobody has shared yet" is the
+ * normal state of a class view before the activity starts.
+ */
 export async function handleClassGet(request: Request, env: Env, rawCode: string): Promise<Response> {
   const db = env.DB;
   if (!db) return NOT_CONFIGURED();

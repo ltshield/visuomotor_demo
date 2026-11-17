@@ -9,21 +9,21 @@ import {
   readLinkCode,
   readSeedOverride,
 } from './assignment';
-import { ALL_PRESETS, GRADUAL_45_V2, QUICK_DEMO_45_V2, SUDDEN_45_V2 } from './presets';
+import { ALL_PRESETS, GRADUAL_45_V3, QUICK_DEMO_45_V3, SUDDEN_45_V3 } from './presets';
 import { mulberry32 } from './rng';
 import { createSessionPlan } from './session';
 
 describe('random 50/50 assignment', () => {
   it('assigns sudden below 0.5 and gradual from 0.5 up', () => {
-    expect(assignPreset(null, () => 0).presetId).toBe(SUDDEN_45_V2.id);
-    expect(assignPreset(null, () => 0.4999).presetId).toBe(SUDDEN_45_V2.id);
-    expect(assignPreset(null, () => 0.5).presetId).toBe(GRADUAL_45_V2.id);
-    expect(assignPreset(null, () => 0.9999).presetId).toBe(GRADUAL_45_V2.id);
+    expect(assignPreset(null, () => 0).presetId).toBe(SUDDEN_45_V3.id);
+    expect(assignPreset(null, () => 0.4999).presetId).toBe(SUDDEN_45_V3.id);
+    expect(assignPreset(null, () => 0.5).presetId).toBe(GRADUAL_45_V3.id);
+    expect(assignPreset(null, () => 0.9999).presetId).toBe(GRADUAL_45_V3.id);
   });
 
   it('records the method and that the condition is concealed', () => {
     expect(assignPreset(null, () => 0.2)).toEqual({
-      presetId: SUDDEN_45_V2.id,
+      presetId: SUDDEN_45_V3.id,
       method: 'random-50-50',
       linkCode: null,
       ignoredLinkCode: null,
@@ -39,29 +39,29 @@ describe('random 50/50 assignment', () => {
       const id = assignPreset(null, rng).presetId;
       counts[id] = (counts[id] ?? 0) + 1;
     }
-    expect(Object.keys(counts).sort()).toEqual([GRADUAL_45_V2.id, SUDDEN_45_V2.id].sort());
-    expect(counts[SUDDEN_45_V2.id] / 20000).toBeGreaterThan(0.48);
-    expect(counts[SUDDEN_45_V2.id] / 20000).toBeLessThan(0.52);
+    expect(Object.keys(counts).sort()).toEqual([GRADUAL_45_V3.id, SUDDEN_45_V3.id].sort());
+    expect(counts[SUDDEN_45_V3.id] / 20000).toBeGreaterThan(0.48);
+    expect(counts[SUDDEN_45_V3.id] / 20000).toBeLessThan(0.52);
   });
 
   it('never assigns the Quick Demo at random', () => {
     const rng = mulberry32(7);
-    for (let i = 0; i < 2000; i++) expect(assignPreset(null, rng).presetId).not.toBe(QUICK_DEMO_45_V2.id);
+    for (let i = 0; i < 2000; i++) expect(assignPreset(null, rng).presetId).not.toBe(QUICK_DEMO_45_V3.id);
   });
 });
 
 describe('direct instructor links', () => {
   it('each link code selects its preset regardless of the coin', () => {
     for (const coin of [0, 0.99]) {
-      expect(assignPreset('k7m2', () => coin).presetId).toBe(SUDDEN_45_V2.id);
-      expect(assignPreset('p4x9', () => coin).presetId).toBe(GRADUAL_45_V2.id);
-      expect(assignPreset('demo', () => coin).presetId).toBe(QUICK_DEMO_45_V2.id);
+      expect(assignPreset('k7m2', () => coin).presetId).toBe(SUDDEN_45_V3.id);
+      expect(assignPreset('p4x9', () => coin).presetId).toBe(GRADUAL_45_V3.id);
+      expect(assignPreset('demo', () => coin).presetId).toBe(QUICK_DEMO_45_V3.id);
     }
   });
 
   it('records the method and code, still concealed from the participant', () => {
     expect(assignPreset('p4x9', () => 0)).toEqual({
-      presetId: GRADUAL_45_V2.id,
+      presetId: GRADUAL_45_V3.id,
       method: 'direct-link',
       linkCode: 'p4x9',
       ignoredLinkCode: null,
@@ -73,13 +73,13 @@ describe('direct instructor links', () => {
   it('an unrecognised code falls back to random assignment and is noted', () => {
     const a = assignPreset('zzzz', () => 0.7);
     expect(a.method).toBe('random-50-50');
-    expect(a.presetId).toBe(GRADUAL_45_V2.id);
+    expect(a.presetId).toBe(GRADUAL_45_V3.id);
     expect(a.linkCode).toBeNull();
     expect(a.ignoredLinkCode).toBe('zzzz');
   });
 
   it('link codes for the canonical presets do not reveal the condition', () => {
-    for (const preset of [SUDDEN_45_V2, GRADUAL_45_V2]) {
+    for (const preset of [SUDDEN_45_V3, GRADUAL_45_V3]) {
       const code = linkCodeForPreset(preset.id)!;
       expect(code).not.toMatch(/sud|grad|rot|45|abrupt|ramp|slow|fast/i);
       expect(buildParticipantLink('https://example.edu/lab/', preset.id)).not.toMatch(/sudden|gradual|rotation/i);
@@ -95,9 +95,9 @@ describe('direct instructor links', () => {
 
   it('published link codes are stable', () => {
     expect(LINK_CODES).toEqual({
-      k7m2: 'rotation-sudden-45-v2',
-      p4x9: 'rotation-gradual-45-v2',
-      demo: 'rotation-quickdemo-45-v2',
+      k7m2: 'rotation-sudden-45-v3',
+      p4x9: 'rotation-gradual-45-v3',
+      demo: 'rotation-quickdemo-45-v3',
     });
   });
 });
@@ -106,9 +106,9 @@ describe('links and URL parameters', () => {
   it('builds the general and direct links', () => {
     const base = 'https://example.edu/lab/';
     expect(buildParticipantLink(base, null)).toBe(base);
-    expect(buildParticipantLink(base, SUDDEN_45_V2.id)).toBe(`${base}?c=k7m2`);
-    expect(buildParticipantLink(base, GRADUAL_45_V2.id)).toBe(`${base}?c=p4x9`);
-    expect(buildParticipantLink(base, QUICK_DEMO_45_V2.id)).toBe(`${base}?c=demo`);
+    expect(buildParticipantLink(base, SUDDEN_45_V3.id)).toBe(`${base}?c=k7m2`);
+    expect(buildParticipantLink(base, GRADUAL_45_V3.id)).toBe(`${base}?c=p4x9`);
+    expect(buildParticipantLink(base, QUICK_DEMO_45_V3.id)).toBe(`${base}?c=demo`);
   });
 
   it('a built link round-trips through readLinkCode and assignPreset', () => {
@@ -139,19 +139,19 @@ describe('links and URL parameters', () => {
 
 describe('trying the other condition after the debrief', () => {
   it('offers the opposite canonical preset, marked as not concealed', () => {
-    expect(assignOtherCondition(SUDDEN_45_V2.id)).toEqual({
-      presetId: GRADUAL_45_V2.id,
+    expect(assignOtherCondition(SUDDEN_45_V3.id)).toEqual({
+      presetId: GRADUAL_45_V3.id,
       method: 'participant-chose-other-condition',
       linkCode: null,
       ignoredLinkCode: null,
       conditionConcealed: false,
       customSettings: null,
     });
-    expect(assignOtherCondition(GRADUAL_45_V2.id)!.presetId).toBe(SUDDEN_45_V2.id);
+    expect(assignOtherCondition(GRADUAL_45_V3.id)!.presetId).toBe(SUDDEN_45_V3.id);
   });
 
   it('has nothing to offer after the Quick Demo', () => {
-    expect(assignOtherCondition(QUICK_DEMO_45_V2.id)).toBeNull();
+    expect(assignOtherCondition(QUICK_DEMO_45_V3.id)).toBeNull();
   });
 });
 
@@ -166,7 +166,7 @@ describe('createSessionPlan', () => {
       previousPresetIds: [],
       now,
     });
-    expect(plan.preset).toBe(GRADUAL_45_V2);
+    expect(plan.preset).toBe(GRADUAL_45_V3);
     expect(plan.schedule).toHaveLength(40);
     expect(plan.seed).toBe(2024);
     expect(plan.runNumber).toBe(1);
@@ -185,15 +185,15 @@ describe('createSessionPlan', () => {
 
   it('numbers repeat runs and remembers what came before', () => {
     const plan = createSessionPlan({
-      assignment: assignOtherCondition(SUDDEN_45_V2.id)!,
+      assignment: assignOtherCondition(SUDDEN_45_V3.id)!,
       seed: 5,
       sessionId: 's',
-      previousPresetIds: [SUDDEN_45_V2.id],
+      previousPresetIds: [SUDDEN_45_V3.id],
       now,
     });
     expect(plan.runNumber).toBe(2);
-    expect(plan.previousPresetIds).toEqual([SUDDEN_45_V2.id]);
-    expect(plan.preset).toBe(GRADUAL_45_V2);
+    expect(plan.previousPresetIds).toEqual([SUDDEN_45_V3.id]);
+    expect(plan.preset).toBe(GRADUAL_45_V3);
     expect(plan.assignment.conditionConcealed).toBe(false);
   });
 });

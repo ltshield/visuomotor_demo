@@ -2,27 +2,35 @@
  * presets.ts — the versioned experimental presets. This file IS the protocol
  * configuration: every trial count, angle, radius and timing value lives here.
  *
- * VERSIONING RULE: a preset id such as `rotation-sudden-45-v2` is a promise.
+ * VERSIONING RULE: a preset id such as `rotation-sudden-45-v3` is a promise.
  * Once it has been released, never edit its values in place — copy it, change
- * the copy, and give it a new id (`...-v3`). `presets.test.ts` contains a
+ * the copy, and give it a new id (`...-v4`). `presets.test.ts` contains a
  * frozen snapshot that fails if a released preset is altered.
  *
  * VERSIONS
- *   v2 (current)  Reach onto the target and HOLD there until it registers
+ *   v3 (current)  As v2, plus a SPEED INSTRUCTION: participants are asked for
+ *                 quick, smooth reaches, and a reach whose movement (onset →
+ *                 arrival) takes longer than `timing.maxMovementMs` is followed
+ *                 by a "Too slow" note. Nothing is discarded. Slow reaches
+ *                 leave time to steer the cursor back mid-reach, which hides
+ *                 changes in aim; quick ones make adaptation show up in the
+ *                 initial direction and on catch trials. These are the
+ *                 presets the app runs.
+ *   v2 (retired)  Reach onto the target and HOLD there until it registers
  *                 (`timing.targetHoldMs`); the cursor then jumps back to the
- *                 centre. These are the presets the app runs.
+ *                 centre. No speed instruction.
  *   v1 (retired)  Slice through the target distance; the cursor was steered
- *                 back to the centre by hand. Kept below for reference so that
- *                 files recorded with it stay interpretable. The app no longer
- *                 runs them: the trial engine implements the v2 rules only.
+ *                 back to the centre by hand.
+ * Retired presets are kept below for reference so that files recorded with
+ * them stay interpretable. The app does not run them.
  *
  * The two canonical presets share ONE structure, geometry, timing and set of
  * analysis criteria (`STANDARD_*` below) and differ only in `perturbation`.
  *
- * Key exports: `PresetConfig` and related types, `SUDDEN_45_V2`,
- * `GRADUAL_45_V2`, `QUICK_DEMO_45_V2`, `CANONICAL_PRESETS`, `ALL_PRESETS`,
+ * Key exports: `PresetConfig` and related types, `SUDDEN_45_V3`,
+ * `GRADUAL_45_V3`, `QUICK_DEMO_45_V3`, `CANONICAL_PRESETS`, `ALL_PRESETS`,
  * `RETIRED_PRESETS`, `getPresetById`, `otherCanonicalPreset`,
- * `targetHoldMsOf`, `arrivalRadius`, `validatePreset`.
+ * `targetHoldMsOf`, `arrivalRadius`, `isTooSlow`, `validatePreset`.
  */
 
 /** Whether the cursor is drawn during the OUTWARD reach. It is always drawn between reaches. */
@@ -59,6 +67,13 @@ export interface TaskTiming {
    * instant the hand arrives (the retired v1 rule).
    */
   targetHoldMs?: number;
+  /**
+   * Speed instruction (v3): a reach whose movement, from onset to arrival,
+   * takes longer than this is followed by a "Too slow" note and flagged
+   * `tooSlow` in the data. The reach still counts. Absent = no speed
+   * instruction (v1, v2).
+   */
+  maxMovementMs?: number;
   /** Time allowed from target onset for the reach to register (ms). */
   reachTimeoutMs: number;
   /** Pause after each reach, during which a registered target pulses and the cursor stays put (ms). */
@@ -159,11 +174,21 @@ const V1_TIMING: TaskTiming = {
  * reaches. The pause is shorter because it only has to show the target's
  * confirmation pulse before the cursor jumps back to the centre.
  */
-export const STANDARD_TIMING: TaskTiming = {
+const V2_TIMING: TaskTiming = {
   holdMs: 400,
   targetHoldMs: 400,
   reachTimeoutMs: 6000,
   feedbackHoldMs: 300,
+};
+
+/**
+ * v3 pacing: v2 plus the speed instruction. 500 ms from movement onset to
+ * arrival (222 units) is an unhurried flick with a mouse; reaches that take
+ * longer are slow enough to be steered.
+ */
+export const STANDARD_TIMING: TaskTiming = {
+  ...V2_TIMING,
+  maxMovementMs: 500,
 };
 
 export const STANDARD_CRITERIA: MovementCriteria = {
@@ -189,12 +214,12 @@ export const QUICK_STRUCTURE: ProtocolStructure = {
 };
 
 // ---------------------------------------------------------------------------
-// Canonical presets (v2) — what the app runs
+// Canonical presets (v3) — what the app runs
 // ---------------------------------------------------------------------------
 
-export const SUDDEN_45_V2: PresetConfig = {
-  id: 'rotation-sudden-45-v2',
-  version: 2,
+export const SUDDEN_45_V3: PresetConfig = {
+  id: 'rotation-sudden-45-v3',
+  version: 3,
   kind: 'canonical',
   label: 'Sudden 45° rotation',
   description:
@@ -206,9 +231,9 @@ export const SUDDEN_45_V2: PresetConfig = {
   criteria: STANDARD_CRITERIA,
 };
 
-export const GRADUAL_45_V2: PresetConfig = {
-  id: 'rotation-gradual-45-v2',
-  version: 2,
+export const GRADUAL_45_V3: PresetConfig = {
+  id: 'rotation-gradual-45-v3',
+  version: 3,
   kind: 'canonical',
   label: 'Gradual 0°→45° rotation',
   description:
@@ -227,9 +252,9 @@ export const GRADUAL_45_V2: PresetConfig = {
 // ---------------------------------------------------------------------------
 
 /** 4 baseline + 8 adaptation slots (1 catch) + 4 aftereffect = 16 reaches to four targets. */
-export const QUICK_DEMO_45_V2: PresetConfig = {
-  id: 'rotation-quickdemo-45-v2',
-  version: 2,
+export const QUICK_DEMO_45_V3: PresetConfig = {
+  id: 'rotation-quickdemo-45-v3',
+  version: 3,
   kind: 'demo',
   label: 'Quick Demo (sudden 45° rotation, 16 reaches)',
   description:
@@ -242,14 +267,55 @@ export const QUICK_DEMO_45_V2: PresetConfig = {
 };
 
 /** The two presets a first-time visitor is randomly assigned between. Order is fixed. */
-export const CANONICAL_PRESETS: readonly PresetConfig[] = [SUDDEN_45_V2, GRADUAL_45_V2];
+export const CANONICAL_PRESETS: readonly PresetConfig[] = [SUDDEN_45_V3, GRADUAL_45_V3];
 
 /** Every preset reachable through a fixed link code. Custom presets are built on demand (core/custom.ts). */
-export const ALL_PRESETS: readonly PresetConfig[] = [SUDDEN_45_V2, GRADUAL_45_V2, QUICK_DEMO_45_V2];
+export const ALL_PRESETS: readonly PresetConfig[] = [SUDDEN_45_V3, GRADUAL_45_V3, QUICK_DEMO_45_V3];
 
 // ---------------------------------------------------------------------------
-// Retired presets (v1) — reference only; never run or assigned
+// Retired presets (v2, v1) — reference only; never run or assigned
 // ---------------------------------------------------------------------------
+
+export const SUDDEN_45_V2: PresetConfig = {
+  id: 'rotation-sudden-45-v2',
+  version: 2,
+  kind: 'canonical',
+  label: 'Sudden 45° rotation (v2, retired)',
+  description:
+    'Retired. As v3, except that there was no speed instruction: reaches could be as slow as the participant liked.',
+  structure: STANDARD_STRUCTURE,
+  perturbation: { kind: 'sudden', angleDeg: 45 },
+  geometry: STANDARD_GEOMETRY,
+  timing: V2_TIMING,
+  criteria: STANDARD_CRITERIA,
+};
+
+export const GRADUAL_45_V2: PresetConfig = {
+  id: 'rotation-gradual-45-v2',
+  version: 2,
+  kind: 'canonical',
+  label: 'Gradual 0°→45° rotation (v2, retired)',
+  description:
+    'Retired. As v3, except that there was no speed instruction: reaches could be as slow as the participant liked.',
+  structure: STANDARD_STRUCTURE,
+  perturbation: { kind: 'gradual', startDeg: 0, endDeg: 45, rampReaches: 8 },
+  geometry: STANDARD_GEOMETRY,
+  timing: V2_TIMING,
+  criteria: STANDARD_CRITERIA,
+};
+
+export const QUICK_DEMO_45_V2: PresetConfig = {
+  id: 'rotation-quickdemo-45-v2',
+  version: 2,
+  kind: 'demo',
+  label: 'Quick Demo (v2, retired)',
+  description: 'Retired. The 16-reach demo under the v2 rules, with no speed instruction.',
+  structure: QUICK_STRUCTURE,
+  perturbation: { kind: 'sudden', angleDeg: 45 },
+  geometry: STANDARD_GEOMETRY,
+  timing: V2_TIMING,
+  criteria: STANDARD_CRITERIA,
+};
 
 export const SUDDEN_45_V1: PresetConfig = {
   id: 'rotation-sudden-45-v1',
@@ -297,7 +363,14 @@ export const QUICK_DEMO_45_V1: PresetConfig = {
  * and the app never assigns them; they stay here so that data files recorded
  * with them can be read against the definition they were made with.
  */
-export const RETIRED_PRESETS: readonly PresetConfig[] = [SUDDEN_45_V1, GRADUAL_45_V1, QUICK_DEMO_45_V1];
+export const RETIRED_PRESETS: readonly PresetConfig[] = [
+  SUDDEN_45_V2,
+  GRADUAL_45_V2,
+  QUICK_DEMO_45_V2,
+  SUDDEN_45_V1,
+  GRADUAL_45_V1,
+  QUICK_DEMO_45_V1,
+];
 
 // ---------------------------------------------------------------------------
 // Lookups and derived values
@@ -347,6 +420,16 @@ export function arrivalRadius(geometry: TaskGeometry, timing: TaskTiming): numbe
 }
 
 /**
+ * Whether a reach's movement (onset → arrival, ms) broke the speed
+ * instruction. Null when the preset gives no speed instruction or the
+ * movement time is unknown (the hand never arrived).
+ */
+export function isTooSlow(timing: TaskTiming, movementDurationMs: number | null): boolean | null {
+  if (timing.maxMovementMs === undefined || movementDurationMs === null) return null;
+  return movementDurationMs > timing.maxMovementMs;
+}
+
+/**
  * Throws a descriptive error if a preset cannot produce a balanced, internally
  * consistent schedule. Run by the tests for every shipped preset and by
  * `generateSchedule`, so a bad edit fails loudly rather than skewing data.
@@ -393,6 +476,9 @@ export function validatePreset(preset: PresetConfig): void {
   if (geometry.inputGain <= 0) fail('inputGain must be positive');
 
   if (timing.holdMs < 0 || timing.reachTimeoutMs <= 0 || timing.feedbackHoldMs < 0) fail('timing values out of range');
+  if (timing.maxMovementMs !== undefined && !(timing.maxMovementMs > 0 && timing.maxMovementMs < timing.reachTimeoutMs)) {
+    fail('maxMovementMs must be positive and shorter than reachTimeoutMs');
+  }
   const targetHoldMs = timing.targetHoldMs ?? 0;
   if (!(targetHoldMs >= 0)) fail('targetHoldMs must not be negative');
   if (targetHoldMs >= timing.reachTimeoutMs) fail('targetHoldMs must be shorter than reachTimeoutMs');

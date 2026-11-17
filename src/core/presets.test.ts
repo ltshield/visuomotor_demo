@@ -4,13 +4,17 @@ import {
   CANONICAL_PRESETS,
   GRADUAL_45_V1,
   GRADUAL_45_V2,
+  GRADUAL_45_V3,
   QUICK_DEMO_45_V1,
   QUICK_DEMO_45_V2,
+  QUICK_DEMO_45_V3,
   RETIRED_PRESETS,
   SUDDEN_45_V1,
   SUDDEN_45_V2,
+  SUDDEN_45_V3,
   arrivalRadius,
   getPresetById,
+  isTooSlow,
   otherCanonicalPreset,
   perturbedReachCount,
   targetHoldMsOf,
@@ -48,7 +52,9 @@ const FROZEN_GEOMETRY = {
 };
 const FROZEN_CRITERIA = { onsetFraction: 0.05, initialDirectionFraction: 0.25, minReachSamples: 4 };
 
-/** v2: reach onto the target and hold for 400 ms; longer time limit; short confirmation pause. */
+/** v3: as v2, plus the speed instruction (onset → arrival within 500 ms, else "Too slow"). */
+const FROZEN_V3_TIMING = { holdMs: 400, targetHoldMs: 400, maxMovementMs: 500, reachTimeoutMs: 6000, feedbackHoldMs: 300 };
+/** v2 (retired): reach onto the target and hold for 400 ms; no speed instruction (the key must stay ABSENT). */
 const FROZEN_V2_TIMING = { holdMs: 400, targetHoldMs: 400, reachTimeoutMs: 6000, feedbackHoldMs: 300 };
 /** v1 (retired): no target hold at all. The key must stay ABSENT, not be set to 0. */
 const FROZEN_V1_TIMING = { holdMs: 400, reachTimeoutMs: 4000, feedbackHoldMs: 500 };
@@ -67,6 +73,9 @@ const semantics = (p: PresetConfig) => ({
 
 describe('stable preset identifiers', () => {
   it('uses the published ids', () => {
+    expect(SUDDEN_45_V3.id).toBe('rotation-sudden-45-v3');
+    expect(GRADUAL_45_V3.id).toBe('rotation-gradual-45-v3');
+    expect(QUICK_DEMO_45_V3.id).toBe('rotation-quickdemo-45-v3');
     expect(SUDDEN_45_V2.id).toBe('rotation-sudden-45-v2');
     expect(GRADUAL_45_V2.id).toBe('rotation-gradual-45-v2');
     expect(QUICK_DEMO_45_V2.id).toBe('rotation-quickdemo-45-v2');
@@ -87,7 +96,48 @@ describe('stable preset identifiers', () => {
   });
 });
 
-describe('frozen v2 semantics (the presets the app runs)', () => {
+describe('frozen v3 semantics (the presets the app runs)', () => {
+  it('rotation-sudden-45-v3 is unchanged', () => {
+    expect(semantics(SUDDEN_45_V3)).toEqual({
+      id: 'rotation-sudden-45-v3',
+      version: 3,
+      kind: 'canonical',
+      perturbation: { kind: 'sudden', angleDeg: 45 },
+      structure: FROZEN_STRUCTURE,
+      geometry: FROZEN_GEOMETRY,
+      timing: FROZEN_V3_TIMING,
+      criteria: FROZEN_CRITERIA,
+    });
+  });
+
+  it('rotation-gradual-45-v3 is unchanged', () => {
+    expect(semantics(GRADUAL_45_V3)).toEqual({
+      id: 'rotation-gradual-45-v3',
+      version: 3,
+      kind: 'canonical',
+      perturbation: { kind: 'gradual', startDeg: 0, endDeg: 45, rampReaches: 8 },
+      structure: FROZEN_STRUCTURE,
+      geometry: FROZEN_GEOMETRY,
+      timing: FROZEN_V3_TIMING,
+      criteria: FROZEN_CRITERIA,
+    });
+  });
+
+  it('rotation-quickdemo-45-v3 is unchanged', () => {
+    expect(semantics(QUICK_DEMO_45_V3)).toEqual({
+      id: 'rotation-quickdemo-45-v3',
+      version: 3,
+      kind: 'demo',
+      perturbation: { kind: 'sudden', angleDeg: 45 },
+      structure: FROZEN_QUICK_STRUCTURE,
+      geometry: FROZEN_GEOMETRY,
+      timing: FROZEN_V3_TIMING,
+      criteria: FROZEN_CRITERIA,
+    });
+  });
+});
+
+describe('frozen v2 semantics (retired, kept for reading old files)', () => {
   it('rotation-sudden-45-v2 is unchanged', () => {
     expect(semantics(SUDDEN_45_V2)).toEqual({
       id: 'rotation-sudden-45-v2',
@@ -126,8 +176,11 @@ describe('frozen v2 semantics (the presets the app runs)', () => {
       criteria: FROZEN_CRITERIA,
     });
   });
-});
 
+  it('v2 timing has no maxMovementMs key at all', () => {
+    for (const p of [SUDDEN_45_V2, GRADUAL_45_V2, QUICK_DEMO_45_V2]) expect('maxMovementMs' in p.timing).toBe(false);
+  });
+});
 describe('frozen v1 semantics (retired, kept for reading old files)', () => {
   it('rotation-sudden-45-v1 is unchanged', () => {
     expect(semantics(SUDDEN_45_V1)).toEqual({
@@ -169,13 +222,16 @@ describe('frozen v1 semantics (retired, kept for reading old files)', () => {
   });
 
   it('v1 timing has no targetHoldMs key at all', () => {
-    for (const p of RETIRED_PRESETS) expect('targetHoldMs' in p.timing).toBe(false);
+    for (const p of [SUDDEN_45_V1, GRADUAL_45_V1, QUICK_DEMO_45_V1]) expect('targetHoldMs' in p.timing).toBe(false);
   });
 });
 
 describe('retired presets can no longer be run or assigned', () => {
-  it('are exactly the three v1 presets', () => {
+  it('are exactly the three v2 and the three v1 presets', () => {
     expect(RETIRED_PRESETS.map((p) => p.id)).toEqual([
+      'rotation-sudden-45-v2',
+      'rotation-gradual-45-v2',
+      'rotation-quickdemo-45-v2',
       'rotation-sudden-45-v1',
       'rotation-gradual-45-v1',
       'rotation-quickdemo-45-v1',
@@ -193,32 +249,41 @@ describe('retired presets can no longer be run or assigned', () => {
 
   it('each has a current successor that differs only in timing (the trial rules)', () => {
     const pairs: Array<[PresetConfig, PresetConfig]> = [
-      [SUDDEN_45_V1, SUDDEN_45_V2],
-      [GRADUAL_45_V1, GRADUAL_45_V2],
-      [QUICK_DEMO_45_V1, QUICK_DEMO_45_V2],
+      [SUDDEN_45_V1, SUDDEN_45_V3],
+      [GRADUAL_45_V1, GRADUAL_45_V3],
+      [QUICK_DEMO_45_V1, QUICK_DEMO_45_V3],
+      [SUDDEN_45_V2, SUDDEN_45_V3],
+      [GRADUAL_45_V2, GRADUAL_45_V3],
+      [QUICK_DEMO_45_V2, QUICK_DEMO_45_V3],
     ];
-    for (const [v1, v2] of pairs) {
-      expect(v2.structure).toEqual(v1.structure);
-      expect(v2.perturbation).toEqual(v1.perturbation);
-      expect(v2.geometry).toEqual(v1.geometry);
-      expect(v2.criteria).toEqual(v1.criteria);
-      expect(v2.kind).toBe(v1.kind);
-      expect(v2.timing).not.toEqual(v1.timing);
+    for (const [old, current] of pairs) {
+      expect(current.structure).toEqual(old.structure);
+      expect(current.perturbation).toEqual(old.perturbation);
+      expect(current.geometry).toEqual(old.geometry);
+      expect(current.criteria).toEqual(old.criteria);
+      expect(current.kind).toBe(old.kind);
+      expect(current.timing).not.toEqual(old.timing);
     }
+  });
+
+  it('v3 differs from v2 only by the speed instruction', () => {
+    const { maxMovementMs, ...rest } = SUDDEN_45_V3.timing;
+    expect(maxMovementMs).toBe(500);
+    expect(rest).toEqual(SUDDEN_45_V2.timing);
   });
 });
 
 describe('the two canonical presets', () => {
-  it('are exactly the v2 sudden and gradual presets', () => {
-    expect(CANONICAL_PRESETS.map((p) => p.id)).toEqual(['rotation-sudden-45-v2', 'rotation-gradual-45-v2']);
+  it('are exactly the v3 sudden and gradual presets', () => {
+    expect(CANONICAL_PRESETS.map((p) => p.id)).toEqual(['rotation-sudden-45-v3', 'rotation-gradual-45-v3']);
   });
 
   it('differ ONLY in the perturbation schedule', () => {
-    expect(SUDDEN_45_V2.structure).toEqual(GRADUAL_45_V2.structure);
-    expect(SUDDEN_45_V2.geometry).toEqual(GRADUAL_45_V2.geometry);
-    expect(SUDDEN_45_V2.timing).toEqual(GRADUAL_45_V2.timing);
-    expect(SUDDEN_45_V2.criteria).toEqual(GRADUAL_45_V2.criteria);
-    expect(SUDDEN_45_V2.perturbation).not.toEqual(GRADUAL_45_V2.perturbation);
+    expect(SUDDEN_45_V3.structure).toEqual(GRADUAL_45_V3.structure);
+    expect(SUDDEN_45_V3.geometry).toEqual(GRADUAL_45_V3.geometry);
+    expect(SUDDEN_45_V3.timing).toEqual(GRADUAL_45_V3.timing);
+    expect(SUDDEN_45_V3.criteria).toEqual(GRADUAL_45_V3.criteria);
+    expect(SUDDEN_45_V3.perturbation).not.toEqual(GRADUAL_45_V3.perturbation);
   });
 
   it('have 40 trials, 22 of them perturbed', () => {
@@ -229,37 +294,37 @@ describe('the two canonical presets', () => {
   });
 
   it('each names the other as "the other condition"; the demo has none', () => {
-    expect(otherCanonicalPreset(SUDDEN_45_V2.id)).toBe(GRADUAL_45_V2);
-    expect(otherCanonicalPreset(GRADUAL_45_V2.id)).toBe(SUDDEN_45_V2);
-    expect(otherCanonicalPreset(QUICK_DEMO_45_V2.id)).toBeUndefined();
+    expect(otherCanonicalPreset(SUDDEN_45_V3.id)).toBe(GRADUAL_45_V3);
+    expect(otherCanonicalPreset(GRADUAL_45_V3.id)).toBe(SUDDEN_45_V3);
+    expect(otherCanonicalPreset(QUICK_DEMO_45_V3.id)).toBeUndefined();
   });
 });
 
 describe('target hold and arrival radius', () => {
-  it('v2 presets hold for 400 ms and arrive at the near edge of the target', () => {
-    for (const p of ALL_PRESETS) {
+  it('v3 and v2 presets hold for 400 ms and arrive at the near edge of the target', () => {
+    for (const p of [...ALL_PRESETS, SUDDEN_45_V2, GRADUAL_45_V2, QUICK_DEMO_45_V2]) {
       expect(targetHoldMsOf(p.timing)).toBe(400);
       expect(arrivalRadius(p.geometry, p.timing)).toBe(222); // 240 − 18
     }
   });
 
   it('v1 presets have no hold and arrive at the target distance itself', () => {
-    for (const p of RETIRED_PRESETS) {
+    for (const p of [SUDDEN_45_V1, GRADUAL_45_V1, QUICK_DEMO_45_V1]) {
       expect(targetHoldMsOf(p.timing)).toBe(0);
       expect(arrivalRadius(p.geometry, p.timing)).toBe(240);
     }
   });
 
   it('a hold of 0 means the same as no hold', () => {
-    const timing = { ...SUDDEN_45_V2.timing, targetHoldMs: 0 };
+    const timing = { ...SUDDEN_45_V3.timing, targetHoldMs: 0 };
     expect(targetHoldMsOf(timing)).toBe(0);
-    expect(arrivalRadius(SUDDEN_45_V2.geometry, timing)).toBe(240);
+    expect(arrivalRadius(SUDDEN_45_V3.geometry, timing)).toBe(240);
   });
 
   it('any cursor position inside the target circle is at or beyond the arrival radius', () => {
     // This is why the near edge is used: resting in the target implies having arrived.
-    const { targetDistance: D, targetRadius: r } = SUDDEN_45_V2.geometry;
-    const R = arrivalRadius(SUDDEN_45_V2.geometry, SUDDEN_45_V2.timing);
+    const { targetDistance: D, targetRadius: r } = SUDDEN_45_V3.geometry;
+    const R = arrivalRadius(SUDDEN_45_V3.geometry, SUDDEN_45_V3.timing);
     for (let angle = 0; angle < 360; angle += 5) {
       const a = (angle * Math.PI) / 180;
       const p = { x: D + r * Math.cos(a), y: r * Math.sin(a) };
@@ -270,7 +335,7 @@ describe('target hold and arrival radius', () => {
 
 describe('validatePreset', () => {
   const variant = (edit: (p: PresetConfig) => void): PresetConfig => {
-    const copy: PresetConfig = structuredClone(SUDDEN_45_V2);
+    const copy: PresetConfig = structuredClone(SUDDEN_45_V3);
     edit(copy);
     return copy;
   };
@@ -310,5 +375,23 @@ describe('validatePreset', () => {
 
   it('rejects a target as large as the reach itself', () => {
     expect(() => validatePreset(variant((p) => (p.geometry.targetRadius = 240)))).toThrow(/targetRadius/);
+  });
+
+  it('rejects a speed limit that is not positive or not shorter than the time limit', () => {
+    expect(() => validatePreset(variant((p) => (p.timing.maxMovementMs = 0)))).toThrow(/maxMovementMs/);
+    expect(() => validatePreset(variant((p) => (p.timing.maxMovementMs = p.timing.reachTimeoutMs)))).toThrow(/maxMovementMs/);
+  });
+});
+
+describe('isTooSlow (the speed instruction)', () => {
+  it('flags only movements longer than the limit', () => {
+    expect(isTooSlow(SUDDEN_45_V3.timing, 499)).toBe(false);
+    expect(isTooSlow(SUDDEN_45_V3.timing, 500)).toBe(false);
+    expect(isTooSlow(SUDDEN_45_V3.timing, 501)).toBe(true);
+  });
+
+  it('has no verdict without a speed instruction or without a movement time', () => {
+    expect(isTooSlow(SUDDEN_45_V2.timing, 2000)).toBeNull();
+    expect(isTooSlow(SUDDEN_45_V3.timing, null)).toBeNull();
   });
 });

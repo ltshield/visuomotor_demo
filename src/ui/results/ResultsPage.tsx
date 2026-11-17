@@ -89,6 +89,17 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
   // Reaches that got to the target distance (so they are analysed) but ran out
   // of time before the hold on the target registered.
   const unregisteredHolds = finalAttempts(session).filter((t) => t.valid && t.holdCompleted === false).length;
+  // The speed instruction (v3 presets): how many analysed reaches were slower than asked.
+  const judged = finalAttempts(session).filter((t) => t.valid && typeof t.tooSlow === 'boolean');
+  const limitMs = preset.timing.maxMovementMs;
+  const speed =
+    limitMs !== undefined && judged.length > 0
+      ? {
+          judged: judged.length,
+          slow: judged.filter((t) => t.tooSlow).length,
+          limitText: limitMs % 1000 === 0 ? `${limitMs / 1000} s` : `${(limitMs / 1000).toFixed(1)} s`,
+        }
+      : null;
 
   // Results live only in this tab. Until something has been downloaded, ask the
   // browser to confirm before the tab is closed or reloaded.
@@ -149,6 +160,16 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
                 `. On ${unregisteredHolds} of the analysed reaches the time limit arrived before the hold on the target registered; the outward movement is analysed all the same`}
             </dd>
           </div>
+          {speed && (
+            <div>
+              <dt>Speed</dt>
+              <dd data-testid="speed-fact">
+                {speed.slow === 0
+                  ? `All ${speed.judged} of your analysed reaches were quicker than the ${speed.limitText} asked for.`
+                  : `${speed.slow} of your ${speed.judged} analysed reaches took longer than the ${speed.limitText} asked for, so you saw “Too slow” after them. They are analysed like the others, but on a slow reach there is time to steer the cursor back while moving, which hides changes in aim.`}
+              </dd>
+            </div>
+          )}
           {session.interruptions.length > 0 && (
             <div>
               <dt>Pauses</dt>

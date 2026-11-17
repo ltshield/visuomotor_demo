@@ -10,9 +10,11 @@
  * removed, or changes meaning (adding fields is a minor bump). The full field
  * reference is in docs/EXPORT_SCHEMA.md.
  *
+ *   2.2.0  The speed instruction (v3 presets): `preset.timing.maxMovementMs`
+ *          and, per attempt, `tooSlow`. Additive.
  *   2.1.0  Adds `metrics.hand/cursor.meanSignedLateralDeviation`, the
  *          whole-path error (signed lateral deviation averaged along the
- *          outward path). Nothing else changes; 2.0.0 files lack only this.
+ *          outward path). Additive.
  *   2.0.0  Hold-to-complete and the jump home. `samples.reach` now runs to the
  *          end of the hold (not just to the crossing); `crossing` is the
  *          arrival at `crossing.radius` and gains `sampleIndex`; `valid` means
@@ -20,6 +22,9 @@
  *          `holdCompleted`, `times.holdCompletionMs`, `preset.timing.targetHoldMs`
  *          and `reflection.consciousAdjustment`; `samples.postReach` is always
  *          empty; `reflection.changedAim` is no longer asked (always null).
+ *          Custom protocols arrived within 2.0.0 as well: `preset.kind`
+ *          'custom', `assignment.method` 'custom-link' and
+ *          `assignment.customSettings` (early 2.0.0 files lack them).
  *   1.0.0  First release.
  *
  * Key exports: `SessionRecord`, `TrialExport`, `buildSessionRecord`,
@@ -56,8 +61,8 @@ import type {
 } from './session';
 
 export const APP_NAME = 'visuomotor-learning-lab';
-export const APP_VERSION = '2.1.0';
-export const SCHEMA_VERSION = '2.1.0';
+export const APP_VERSION = '2.2.0';
+export const SCHEMA_VERSION = '2.2.0';
 
 /** Plain-language key to units and signs, embedded in every file so it can be read on its own. */
 export const CONVENTIONS = {
@@ -75,6 +80,8 @@ export const CONVENTIONS = {
     'Every reach metric is measured over the outward reach only: from the go cue to ARRIVAL, the first (interpolated) moment the hand reached crossing.radius from the start. With a target hold that radius is targetDistance - targetRadius (the near edge of the target). Samples from crossing.sampleIndex onward are settling on the target and holding; no metric uses them.',
   registering:
     'A reach registers (holdCompleted) when the target zone has been occupied continuously for preset.timing.targetHoldMs. Visible cursor: the cursor centre inside the target circle. Hidden cursor: the unseen hand at least crossing.radius from the start, in any direction.',
+  speed:
+    'Participants were asked for quick, smooth reaches. tooSlow is true when movement onset to arrival took longer than preset.timing.maxMovementMs; the participant was then shown "Too slow". Such reaches are kept and analysed like any other. Null when the preset has no speed instruction or the hand never arrived.',
   sampleRounding: 'Numbers inside sample arrays are rounded to 3 decimal places in the JSON file.',
 } as const;
 
@@ -110,6 +117,8 @@ export interface TrialExport {
   outcome: ReachOutcome;
   /** True when the target zone was held long enough for the reach to register. */
   holdCompleted: boolean;
+  /** True when the movement broke the speed instruction and "Too slow" was shown; null without one. See CONVENTIONS.speed. */
+  tooSlow: boolean | null;
   /**
    * True when the hand arrived (reached the arrival radius) and metrics could
    * be computed. This can be true for a 'timeout' whose hold never registered.
@@ -229,6 +238,7 @@ export function buildSessionRecord(
       cursorVisibleDuringReach: r.cursorVisibleDuringReach,
       outcome: r.outcome,
       holdCompleted: r.holdCompleted,
+      tooSlow: r.tooSlow,
       valid: metrics.valid,
       invalidReason: metrics.nullReason,
       startAnchorOffset: { x: r.startAnchorOffset.x, y: r.startAnchorOffset.y },

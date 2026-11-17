@@ -19,9 +19,9 @@
 import { decodeSettings, resolvePreset, type InstructorSettings } from './custom';
 import {
   CANONICAL_PRESETS,
-  GRADUAL_45_V2,
-  QUICK_DEMO_45_V2,
-  SUDDEN_45_V2,
+  GRADUAL_45_V3,
+  QUICK_DEMO_45_V3,
+  SUDDEN_45_V3,
   getPresetById,
   otherCanonicalPreset,
   type PresetConfig,
@@ -67,9 +67,9 @@ export const LINK_PARAM = 'c';
  * The Quick Demo is openly labelled as a demo, so its code is readable.
  */
 export const LINK_CODES: Readonly<Record<string, string>> = Object.freeze({
-  k7m2: SUDDEN_45_V2.id,
-  p4x9: GRADUAL_45_V2.id,
-  demo: QUICK_DEMO_45_V2.id,
+  k7m2: SUDDEN_45_V3.id,
+  p4x9: GRADUAL_45_V3.id,
+  demo: QUICK_DEMO_45_V3.id,
 });
 
 export function linkCodeForPreset(presetId: string): string | null {

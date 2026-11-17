@@ -14,11 +14,11 @@ import {
 } from './analysis';
 import { TrialEngine, type AttemptRecord, type EngineTrial } from './engine';
 import { norm, targetPosition } from './geometry';
-import { GRADUAL_45_V2, QUICK_DEMO_45_V2, SUDDEN_45_V2, arrivalRadius } from './presets';
+import { GRADUAL_45_V3, QUICK_DEMO_45_V3, SUDDEN_45_V3, arrivalRadius } from './presets';
 import { generateSchedule, type TrialSpec } from './schedule';
 import { EngineDriver, engineConfigFor, runScriptedSession, type ReachOptions } from './testUtils';
 
-const preset = SUDDEN_45_V2;
+const preset = SUDDEN_45_V3;
 const { geometry, criteria } = preset;
 const D = geometry.targetDistance;
 /** Arrival radius: where the outward reach ends and every path metric is measured to. */
@@ -413,7 +413,7 @@ describe('invalid and degenerate trials produce nulls with a reason', () => {
 });
 
 describe('grouping trials', () => {
-  const schedule = generateSchedule(SUDDEN_45_V2, 4);
+  const schedule = generateSchedule(SUDDEN_45_V3, 4);
 
   it('splits the standard schedule into the expected groups', () => {
     const g = groupTrials(schedule);
@@ -429,7 +429,7 @@ describe('grouping trials', () => {
   });
 
   it('keeps early and late windows from overlapping in the short demo', () => {
-    const g = groupTrials(generateSchedule(QUICK_DEMO_45_V2, 4));
+    const g = groupTrials(generateSchedule(QUICK_DEMO_45_V3, 4));
     expect(g.perturbed).toHaveLength(7);
     expect(g.earlyPerturbed).toHaveLength(3);
     expect(g.latePerturbed).toHaveLength(3);
@@ -446,7 +446,7 @@ describe('per-participant summary', () => {
   /** A scripted participant with a known aim offset in each part of the session. */
   const aim = (t: TrialSpec) => (t.phase === 'baseline' ? 2 : t.phase === 'adaptation' ? -40 : -15);
 
-  const summaryFor = (presetConfig: typeof SUDDEN_45_V2) => {
+  const summaryFor = (presetConfig: typeof SUDDEN_45_V3) => {
     const schedule = generateSchedule(presetConfig, 21);
     const { engine } = runScriptedSession(presetConfig, schedule, aim);
     const trials: SummaryTrial[] = engine.getRecords().map((r) => ({
@@ -460,7 +460,7 @@ describe('per-participant summary', () => {
   };
 
   it('recovers the scripted aim in each part of a sudden session', () => {
-    const s = summaryFor(SUDDEN_45_V2);
+    const s = summaryFor(SUDDEN_45_V3);
     expect(s.metric).toBe('hand.initialDirectionErrorDeg');
     expect(s.trialsScheduled).toBe(40);
     expect(s.trialsValid).toBe(40);
@@ -478,15 +478,15 @@ describe('per-participant summary', () => {
   });
 
   it('reports the mean rotation actually applied in the early window of a gradual session', () => {
-    const s = summaryFor(GRADUAL_45_V2);
+    const s = summaryFor(GRADUAL_45_V3);
     const step = 45 / 7;
     expect(s.earlyPerturbed.meanRotationDeg).toBeCloseTo((0 + step + 2 * step + 3 * step) / 4, 9);
     expect(s.latePerturbed.meanRotationDeg).toBe(45);
   });
 
   it('leaves invalid trials out of the means and counts them', () => {
-    const schedule = generateSchedule(SUDDEN_45_V2, 21);
-    const { engine } = runScriptedSession(SUDDEN_45_V2, schedule, aim);
+    const schedule = generateSchedule(SUDDEN_45_V3, 21);
+    const { engine } = runScriptedSession(SUDDEN_45_V3, schedule, aim);
     const trials: SummaryTrial[] = engine.getRecords().map((r, i) => {
       const metrics = computeTrialMetrics(asInput(r), geometry, criteria);
       return {
