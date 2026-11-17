@@ -17,7 +17,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { eventsToCsv, exportFileNames, sessionToJson, trialsToCsv } from '../../core/export';
-import type { SessionRecord } from '../../core/record';
+import { arrivalRadius } from '../../core/presets';
+import { finalAttempts, type SessionRecord } from '../../core/record';
 import { downloadText } from '../download';
 import { describePerturbation } from '../presetText';
 import { CatchComparisonCharts } from './CatchComparisonCharts';
@@ -38,7 +39,7 @@ const ASSIGNMENT_TEXT: Record<SessionRecord['assignment']['method'], string> = {
 function analysedText(session: SessionRecord): string {
   const s = session.summary;
   const problems: string[] = [];
-  if (s.trialsTimedOut > 0) problems.push(`${s.trialsTimedOut} timed out`);
+  if (s.trialsTimedOut > 0) problems.push(`${s.trialsTimedOut} timed out before reaching the target distance`);
   if (s.trialsDegenerate > 0) problems.push(`${s.trialsDegenerate} had too few mouse samples`);
   return `${s.trialsValid} of ${s.trialsScheduled}${problems.length > 0 ? ` (${problems.join(', ')})` : ''}`;
 }
@@ -65,6 +66,9 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
   const { preset } = session;
   const g = preset.geometry;
   const interruptedAttempts = session.trials.filter((t) => t.outcome === 'interrupted').length;
+  // Reaches that got to the target distance (so they are analysed) but ran out
+  // of time before the hold on the target registered.
+  const unregisteredHolds = finalAttempts(session).filter((t) => t.valid && t.holdCompleted === false).length;
 
   // Results live only in this tab. Until something has been downloaded, ask the
   // browser to confirm before the tab is closed or reloaded.
@@ -114,7 +118,11 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
           </div>
           <div>
             <dt>Reaches analysed</dt>
-            <dd>{analysedText(session)}</dd>
+            <dd>
+              {analysedText(session)}
+              {unregisteredHolds > 0 &&
+                `. On ${unregisteredHolds} of the analysed reaches the time limit arrived before the hold on the target registered; the outward movement is analysed all the same`}
+            </dd>
           </div>
           {session.interruptions.length > 0 && (
             <div>
@@ -168,9 +176,10 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
         intro={
           <>
             Each path is one outward reach, turned so that its target is straight up. All panels use the same axes. A
-            path that leans right went clockwise of its target; one that leans left went counterclockwise. Reaches end
-            on the faint arc, the target distance. Point at a path for its details, or click it to open that reach in
-            section 4.
+            path that leans right went clockwise of its target; one that leans left went counterclockwise. Each path
+            stops on the faint arc, where the hand first got as far out as the target; any steering onto the target
+            after that is left out here (section 4 shows it). Point at a path for its details, or click it to open
+            that reach in section 4.
           </>
         }
       >
@@ -179,6 +188,7 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
           kind={kind}
           targetRadius={g.targetRadius / g.targetDistance}
           startRadius={g.startRadius / g.targetDistance}
+          arrivalRadius={arrivalRadius(g, preset.timing) / g.targetDistance}
           onSelectTrial={inspect}
         />
       </ChartCard>

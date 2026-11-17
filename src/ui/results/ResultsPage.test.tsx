@@ -22,9 +22,9 @@ const demo = scriptedSessionRecord('demo', aim);
 
 function renderResults(session: SessionRecord, onTryOther = vi.fn()) {
   const other =
-    session.preset.id === 'rotation-sudden-45-v1'
+    session.preset.id === 'rotation-sudden-45-v2'
       ? 'Gradual 0°→45° rotation'
-      : session.preset.id === 'rotation-gradual-45-v1'
+      : session.preset.id === 'rotation-gradual-45-v2'
         ? 'Sudden 45° rotation'
         : null;
   const view = render(<ResultsPage session={session} otherVersionLabel={other} onTryOther={onTryOther} />);
@@ -72,7 +72,7 @@ describe('reveal', () => {
   });
 
   it('warns about carry-over on a repeat run', () => {
-    const second: SessionRecord = { ...gradual, runNumber: 2, previousPresetIds: ['rotation-sudden-45-v1'] };
+    const second: SessionRecord = { ...gradual, runNumber: 2, previousPresetIds: ['rotation-sudden-45-v2'] };
     const { text } = renderResults(second);
     expect(text()).toContain('This was run 2 of this visit');
     expect(text()).toContain('the two runs are not a fair comparison of the versions');
@@ -180,9 +180,28 @@ describe('numbers and tables', () => {
       summary: { ...sudden.summary, trialsValid: 39, trialsTimedOut: 1 },
     };
     const { text } = renderResults(withTimeout);
-    expect(text()).toContain('Reaches analysed39 of 40 (1 timed out)');
+    expect(text()).toContain('Reaches analysed39 of 40 (1 timed out before reaching the target distance)');
     expect(text()).toContain('No value is plotted for trial 5 (timed out).');
     expect(document.querySelectorAll('.trial-table tbody tr')[4].textContent).toContain('timed out');
+  });
+
+  it('says when a reach was analysed although its hold never registered', () => {
+    const unregistered: SessionRecord = {
+      ...sudden,
+      trials: sudden.trials.map((t) =>
+        t.trialNumber === 20 ? { ...t, outcome: 'timeout' as const, holdCompleted: false } : t,
+      ),
+    };
+    const { text } = renderResults(unregistered);
+    expect(text()).toContain('Reaches analysed40 of 40');
+    expect(text()).toContain('On 1 of the analysed reaches the time limit arrived before the hold on the target registered');
+    // The catch trial is still plotted and summarised: its outward reach was complete.
+    const table = document.querySelector('.summary-table') as HTMLElement;
+    expect(within(table).getByRole('row', { name: /^Catch trial 1/ }).textContent).toContain('−35°');
+    fireEvent.change(screen.getByLabelText('Trial number'), { target: { value: '20' } });
+    expect(document.querySelector('.inspector-details')?.textContent).toContain(
+      'Reached the target distance, but time ran out before the hold registered',
+    );
   });
 });
 
@@ -248,6 +267,26 @@ describe('trial inspector', () => {
       'The cursor was hidden during this reach, so only the hand path exists.',
     );
   });
+
+  it('shows the outward reach and, separately, what followed arrival', () => {
+    renderResults(sudden);
+    fireEvent.change(screen.getByLabelText('Trial number'), { target: { value: '12' } });
+    const inspector = document.querySelector('#trial-inspector') as HTMLElement;
+    // A rotated reach: the hand and the cursor each have a dashed after-arrival line.
+    expect(inspector.querySelectorAll('polyline.inspector-after')).toHaveLength(2);
+    expect(inspector.textContent).toContain('After arriving: steering onto the target and holding (not measured)');
+    expect(inspector.textContent).toContain('The round marker is where the hand first got as far out as the target');
+    const details = document.querySelector('.inspector-details')?.textContent ?? '';
+    expect(details).toContain('OutcomeRegistered: cursor held on the target');
+    expect(details).toMatch(/Hold registered\d+ ms after the target lit/);
+    expect(details).toContain('Hand direction on arrival−35° (35° clockwise)');
+  });
+
+  it('describes a registered hidden-cursor reach by distance, not by hitting the target', () => {
+    renderResults(sudden);
+    const details = document.querySelector('.inspector-details')?.textContent ?? '';
+    expect(details).toContain('OutcomeRegistered: hand held at the target distance');
+  });
 });
 
 describe('downloads and next steps', () => {
@@ -259,9 +298,9 @@ describe('downloads and next steps', () => {
 
     const calls = vi.mocked(downloadText).mock.calls;
     expect(calls.map((c) => c[0])).toEqual([
-      'motor-learning_rotation-sudden-45-v1_20261114-1530_session.json',
-      'motor-learning_rotation-sudden-45-v1_20261114-1530_trials.csv',
-      'motor-learning_rotation-sudden-45-v1_20261114-1530_events.csv',
+      'motor-learning_rotation-sudden-45-v2_20261114-1530_session.json',
+      'motor-learning_rotation-sudden-45-v2_20261114-1530_trials.csv',
+      'motor-learning_rotation-sudden-45-v2_20261114-1530_events.csv',
     ]);
     expect(calls.map((c) => c[2])).toEqual(['application/json', 'text/csv', 'text/csv']);
     const saved = JSON.parse(calls[0][1]) as SessionRecord;

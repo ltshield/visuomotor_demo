@@ -6,6 +6,7 @@ import {
   computeTrialMetrics,
   groupTrials,
   outwardPath,
+  settlePath,
   summarizeSession,
   type MetricsInput,
   type Path,
@@ -13,13 +14,15 @@ import {
 } from './analysis';
 import { TrialEngine, type AttemptRecord, type EngineTrial } from './engine';
 import { norm, targetPosition } from './geometry';
-import { GRADUAL_45_V1, QUICK_DEMO_45_V1, SUDDEN_45_V1 } from './presets';
+import { GRADUAL_45_V2, QUICK_DEMO_45_V2, SUDDEN_45_V2, arrivalRadius } from './presets';
 import { generateSchedule, type TrialSpec } from './schedule';
 import { EngineDriver, engineConfigFor, runScriptedSession, type ReachOptions } from './testUtils';
 
-const preset = SUDDEN_45_V1;
+const preset = SUDDEN_45_V2;
 const { geometry, criteria } = preset;
 const D = geometry.targetDistance;
+/** Arrival radius: where the outward reach ends and every path metric is measured to. */
+const R = arrivalRadius(geometry, preset.timing);
 const EIGHT_DIRECTIONS = [0, 45, 90, 135, 180, 225, 270, 315];
 const sinDeg = (d: number) => Math.sin((d * Math.PI) / 180);
 
@@ -37,7 +40,7 @@ function recordReach(trial: Partial<EngineTrial>, handAngleDeg: number, options:
   const config = engineConfigFor(preset);
   const spec: EngineTrial = { targetIndex: 0, targetAngleDeg: 0, rotationDeg: 0, feedback: 'visible', ...trial };
   const engine = new TrialEngine([spec], config, { startTimeMs: 0 });
-  const driver = new EngineDriver(engine, config, 0);
+  const driver = new EngineDriver(engine, config, 0, [spec]);
   driver.trial(handAngleDeg, options);
   return engine.getRecords()[0];
 }
@@ -56,7 +59,7 @@ describe('signed error across all eight target directions', () => {
         expect(m.hand!.initialDirectionErrorDeg).toBeCloseTo(offset, 6);
         expect(m.hand!.endpointDirectionErrorDeg).toBeCloseTo(offset, 6);
         // Lateral deviation carries the same sign and the expected size.
-        expect(m.hand!.maxAbsLateralDeviation).toBeCloseTo(D * Math.abs(sinDeg(offset)), 4);
+        expect(m.hand!.maxAbsLateralDeviation).toBeCloseTo(R * Math.abs(sinDeg(offset)), 4);
         if (offset !== 0) {
           expect(Math.sign(m.hand!.signedLateralDeviationAtMax)).toBe(Math.sign(offset));
         }
@@ -142,24 +145,58 @@ describe('straight-reach reference values', () => {
     expect(m.hand!.initialDirectionErrorDeg).toBeCloseTo(0, 6);
     expect(m.hand!.maxAbsLateralDeviation).toBeCloseTo(0, 6);
     expect(m.hand!.meanAbsLateralDeviation).toBeCloseTo(0, 6);
-    expect(m.hand!.pathLength).toBeCloseTo(D, 6);
+    expect(m.hand!.pathLength).toBeCloseTo(R, 6); // measured to arrival, not to the end of the hold
     expect(m.hand!.pathEfficiency).toBeCloseTo(1, 6);
   });
 
   it('a straight but misdirected reach has mean |lateral| of half its maximum', () => {
     const m = metricsOf(recordReach({ targetAngleDeg: 90 }, 120));
-    expect(m.hand!.maxAbsLateralDeviation).toBeCloseTo(D * sinDeg(30), 4);
-    expect(m.hand!.meanAbsLateralDeviation).toBeCloseTo((D * sinDeg(30)) / 2, 4);
+    expect(m.hand!.maxAbsLateralDeviation).toBeCloseTo(R * sinDeg(30), 4);
+    expect(m.hand!.meanAbsLateralDeviation).toBeCloseTo((R * sinDeg(30)) / 2, 4);
     expect(m.hand!.pathEfficiency).toBeCloseTo(1, 6); // straight, just aimed elsewhere
   });
 
-  it('reaction time and movement duration come from onset and crossing times', () => {
-    const r = recordReach({}, 0, { distance: D * 1.08, durationMs: 300 });
+  it('reaction time and movement duration come from onset and arrival times', () => {
+    const r = recordReach({}, 0, { distance: D * 1.04, durationMs: 300 });
     const m = metricsOf(r);
-    const speed = (D * 1.08) / 300;
+    const speed = (D * 1.04) / 300;
     expect(m.reactionTimeMs).toBeCloseTo((0.05 * D) / speed, 6);
-    expect(m.movementDurationMs).toBeCloseTo((0.95 * D) / speed, 6);
+    expect(m.movementDurationMs).toBeCloseTo((R - 0.05 * D) / speed, 6);
     expect(m.reactionTimeMs! + m.movementDurationMs!).toBeCloseTo(r.times.completionMs! - r.times.goCueMs!, 6);
+  });
+
+  it('movement duration does not include the hold: it stops at arrival', () => {
+    const r = recordReach({}, 0);
+    const m = metricsOf(r);
+    const holdMs = preset.timing.targetHoldMs!;
+    expect(r.times.holdCompletionMs! - r.times.completionMs!).toBeGreaterThanOrEqual(holdMs);
+    expect(m.movementDurationMs).toBeCloseTo(r.times.completionMs! - r.times.movementOnsetMs!, 9);
+  });
+
+  it('a slow, wandering settle onto the target changes none of the reach metrics', () => {
+    // Same outward reach (25 degrees off target); one participant corrects at once, the other dithers first.
+    const spec: EngineTrial = { targetIndex: 0, targetAngleDeg: 0, rotationDeg: 0, feedback: 'visible' };
+    const run = (dither: boolean) => {
+      const config = engineConfigFor(preset);
+      const engine = new TrialEngine([spec], config, { startTimeMs: 0 });
+      const driver = new EngineDriver(engine, config, 0, [spec]);
+      driver.center();
+      driver.reach(25);
+      if (dither) {
+        driver.wait(600);
+        driver.move(-80, 40, 200);
+        driver.move(30, -90, 300);
+      }
+      driver.settle();
+      driver.finishFeedback();
+      return metricsOf(engine.getRecords()[0]);
+    };
+    const prompt = run(false);
+    const dithering = run(true);
+    expect(dithering.hand).toEqual(prompt.hand);
+    expect(dithering.cursor).toEqual(prompt.cursor);
+    expect(dithering.movementDurationMs).toBeCloseTo(prompt.movementDurationMs!, 9);
+    expect(dithering.reachSampleCount).toBe(prompt.reachSampleCount);
   });
 
   it('results do not depend on the mouse sampling rate', () => {
@@ -173,17 +210,58 @@ describe('straight-reach reference values', () => {
 });
 
 describe('outwardPath and alignPath', () => {
-  it('ends exactly on the target circle and drops the overshoot sample', () => {
+  it('ends exactly on the arrival radius and leaves out everything recorded after it', () => {
     const r = recordReach({ rotationDeg: 45 }, 10);
     const hand = outwardPath(asInput(r), 'hand')!;
     const cursor = outwardPath(asInput(r), 'cursor')!;
     const last = hand.x.length - 1;
-    expect(norm({ x: hand.x[last], y: hand.y[last] })).toBeCloseTo(D, 6);
-    expect(norm({ x: cursor.x[last], y: cursor.y[last] })).toBeCloseTo(D, 6);
-    expect(hand.x.length).toBe(r.reach.tMs.length);
+    expect(norm({ x: hand.x[last], y: hand.y[last] })).toBeCloseTo(R, 6);
+    expect(norm({ x: cursor.x[last], y: cursor.y[last] })).toBeCloseTo(R, 6);
+    // Samples before the arrival sample, plus the interpolated arrival point itself.
+    expect(hand.x.length).toBe(r.crossing!.sampleIndex + 1);
+    expect(hand.x.length).toBeLessThan(r.reach.tMs.length); // the settle and hold are not in it
     expect(hand.tMs[last]).toBe(r.crossing!.tMs);
     // Starts at the anchored start.
     expect([hand.x[0], hand.y[0]]).toEqual([0, 0]);
+  });
+
+  it('settlePath picks up where outwardPath ends and runs to the last recorded sample', () => {
+    const r = recordReach({ rotationDeg: 45 }, 10);
+    const outward = outwardPath(asInput(r), 'hand')!;
+    const settle = settlePath(asInput(r), 'hand')!;
+    const end = outward.x.length - 1;
+    expect([settle.x[0], settle.y[0], settle.tMs[0]]).toEqual([outward.x[end], outward.y[end], outward.tMs[end]]);
+    // Together they account for every recorded sample (the arrival point is shared).
+    expect(outward.x.length + settle.x.length - 1).toBe(r.reach.tMs.length + 1);
+    const n = r.reach.tMs.length - 1;
+    expect(settle.x[settle.x.length - 1]).toBe(r.reach.handX[n]);
+    // The cursor's settle path ends in the target, where it was held.
+    const cursor = settlePath(asInput(r), 'cursor')!;
+    const last = cursor.x.length - 1;
+    expect(norm({ x: cursor.x[last] - D, y: cursor.y[last] })).toBeLessThanOrEqual(geometry.targetRadius);
+  });
+
+  it('there is no settle path when the hand never arrived or the cursor was hidden', () => {
+    const hidden = recordReach({ feedback: 'hidden' }, 0);
+    expect(settlePath(asInput(hidden), 'cursor')).toBeNull();
+    expect(settlePath(asInput(hidden), 'hand')).not.toBeNull();
+    const data = asInput(hidden);
+    expect(settlePath({ ...data, crossing: null, outcome: 'timeout' }, 'hand')).toBeNull();
+  });
+
+  it('reads files from before schema 2, where the crossing was always the last sample', () => {
+    const r = recordReach({}, 0);
+    const keep = r.crossing!.sampleIndex + 1;
+    const reach = {
+      ...r.reach,
+      tMs: r.reach.tMs.slice(0, keep),
+      handX: r.reach.handX.slice(0, keep),
+      handY: r.reach.handY.slice(0, keep),
+    };
+    const oldCrossing = { ...r.crossing!, sampleIndex: undefined } as unknown as typeof r.crossing;
+    const path = outwardPath({ outcome: r.outcome, crossing: oldCrossing, reach }, 'hand')!;
+    expect(path.x.length).toBe(keep);
+    expect(path.x[path.x.length - 1]).toBe(r.crossing!.handX);
   });
 
   it('has no cursor path when the cursor was hidden', () => {
@@ -192,11 +270,12 @@ describe('outwardPath and alignPath', () => {
     expect(outwardPath(asInput(r), 'hand')).not.toBeNull();
   });
 
-  it('never includes return or post-reach movement', () => {
+  it('covers go cue to arrival only, never the hold that follows', () => {
     const r = recordReach({}, 0);
     const hand = outwardPath(asInput(r), 'hand')!;
     expect(hand.tMs[0]).toBe(r.times.goCueMs);
-    expect(hand.tMs[hand.tMs.length - 1]).toBeLessThanOrEqual(r.times.reachEndMs!);
+    expect(hand.tMs[hand.tMs.length - 1]).toBe(r.times.completionMs);
+    expect(hand.tMs[hand.tMs.length - 1]).toBeLessThanOrEqual(r.times.holdCompletionMs! - preset.timing.targetHoldMs!);
   });
 
   it('aligns to the target axis: progress is the dot product, lateral the cross product', () => {
@@ -208,12 +287,12 @@ describe('outwardPath and alignPath', () => {
     expect(b.lateral[1]).toBeCloseTo(3, 9);
   });
 
-  it('aligned straight reaches to any target land on (D, 0)', () => {
+  it('aligned straight reaches to any target land on (R, 0)', () => {
     for (const targetAngleDeg of EIGHT_DIRECTIONS) {
       const r = recordReach({ targetAngleDeg }, targetAngleDeg);
       const a = alignPath(outwardPath(asInput(r), 'hand')!, targetAngleDeg);
       const last = a.progress.length - 1;
-      expect(a.progress[last]).toBeCloseTo(D, 6);
+      expect(a.progress[last]).toBeCloseTo(R, 6);
       expect(a.lateral[last]).toBeCloseTo(0, 6);
     }
   });
@@ -223,9 +302,9 @@ describe('invalid and degenerate trials produce nulls with a reason', () => {
   const config = engineConfigFor(preset);
   const spec: EngineTrial = { targetIndex: 0, targetAngleDeg: 0, rotationDeg: 45, feedback: 'visible' };
 
-  it('timeout', () => {
+  it('timeout before arriving', () => {
     const engine = new TrialEngine([spec], config, { startTimeMs: 0 });
-    const driver = new EngineDriver(engine, config, 0);
+    const driver = new EngineDriver(engine, config, 0, [spec]);
     driver.center();
     driver.move(120, 30, 150);
     driver.wait(preset.timing.reachTimeoutMs + 50);
@@ -242,9 +321,31 @@ describe('invalid and degenerate trials produce nulls with a reason', () => {
     expect(m.reachSampleCount).toBeGreaterThan(10); // the samples themselves are kept
   });
 
+  it('a reach that ARRIVED and then ran out of time while settling is analysed, not discarded', () => {
+    // E.g. a catch trial: the hand goes 45 degrees clockwise, reaches the target distance,
+    // and the participant never gets the cursor settled before the limit.
+    const catchLike: EngineTrial = { targetIndex: 0, targetAngleDeg: 0, rotationDeg: 0, feedback: 'visible' };
+    const engine = new TrialEngine([catchLike], config, { startTimeMs: 0 });
+    const driver = new EngineDriver(engine, config, 0, [catchLike]);
+    driver.center();
+    driver.reach(-45);
+    driver.wait(preset.timing.reachTimeoutMs + 50);
+    driver.finishFeedback();
+    const r = engine.getRecords()[0];
+    expect(r.outcome).toBe('timeout');
+    expect(r.holdCompleted).toBe(false);
+    const m = metricsOf(r);
+    expect(m.valid).toBe(true);
+    expect(m.nullReason).toBeNull();
+    expect(m.hand!.initialDirectionErrorDeg).toBeCloseTo(-45, 6);
+    expect(m.hand!.endpointDirectionErrorDeg).toBeCloseTo(-45, 6);
+    expect(m.cursor!.initialDirectionErrorDeg).toBeCloseTo(-45, 6);
+    expect(m.movementDurationMs).not.toBeNull();
+  });
+
   it('interrupted', () => {
     const engine = new TrialEngine([spec], config, { startTimeMs: 0 });
-    const driver = new EngineDriver(engine, config, 0);
+    const driver = new EngineDriver(engine, config, 0, [spec]);
     driver.center();
     driver.move(100, 0, 100);
     engine.interrupt('pointer-lock-lost', driver.t);
@@ -252,12 +353,25 @@ describe('invalid and degenerate trials produce nulls with a reason', () => {
     expect(m).toMatchObject({ valid: false, nullReason: 'interrupted', hand: null, cursor: null });
   });
 
-  it('too few samples (a single enormous jump across the workspace)', () => {
+  it('interrupted after arriving: still not analysed, because the trial is repeated', () => {
     const engine = new TrialEngine([spec], config, { startTimeMs: 0 });
-    const driver = new EngineDriver(engine, config, 0);
+    const driver = new EngineDriver(engine, config, 0, [spec]);
     driver.center();
-    engine.handleMove(400, 0, driver.t + 20);
+    driver.reach(0);
+    engine.interrupt('pointer-lock-lost', driver.t);
+    const r = engine.getRecords()[0];
+    expect(r.crossing).not.toBeNull();
+    expect(metricsOf(r)).toMatchObject({ valid: false, nullReason: 'interrupted', hand: null, cursor: null });
+  });
+
+  it('too few samples (a single enormous jump straight onto the target)', () => {
+    const plain: EngineTrial = { ...spec, rotationDeg: 0 };
+    const engine = new TrialEngine([plain], config, { startTimeMs: 0 });
+    const driver = new EngineDriver(engine, config, 0, [plain]);
+    driver.center();
+    engine.handleMove(D, 0, driver.t + 20);
     driver.t += 20;
+    driver.settle();
     driver.finishFeedback();
     const r = engine.getRecords()[0];
     expect(r.outcome).toBe('completed');
@@ -268,7 +382,7 @@ describe('invalid and degenerate trials produce nulls with a reason', () => {
 });
 
 describe('grouping trials', () => {
-  const schedule = generateSchedule(SUDDEN_45_V1, 4);
+  const schedule = generateSchedule(SUDDEN_45_V2, 4);
 
   it('splits the standard schedule into the expected groups', () => {
     const g = groupTrials(schedule);
@@ -284,7 +398,7 @@ describe('grouping trials', () => {
   });
 
   it('keeps early and late windows from overlapping in the short demo', () => {
-    const g = groupTrials(generateSchedule(QUICK_DEMO_45_V1, 4));
+    const g = groupTrials(generateSchedule(QUICK_DEMO_45_V2, 4));
     expect(g.perturbed).toHaveLength(7);
     expect(g.earlyPerturbed).toHaveLength(3);
     expect(g.latePerturbed).toHaveLength(3);
@@ -301,7 +415,7 @@ describe('per-participant summary', () => {
   /** A scripted participant with a known aim offset in each part of the session. */
   const aim = (t: TrialSpec) => (t.phase === 'baseline' ? 2 : t.phase === 'adaptation' ? -40 : -15);
 
-  const summaryFor = (presetConfig: typeof SUDDEN_45_V1) => {
+  const summaryFor = (presetConfig: typeof SUDDEN_45_V2) => {
     const schedule = generateSchedule(presetConfig, 21);
     const { engine } = runScriptedSession(presetConfig, schedule, aim);
     const trials: SummaryTrial[] = engine.getRecords().map((r) => ({
@@ -315,7 +429,7 @@ describe('per-participant summary', () => {
   };
 
   it('recovers the scripted aim in each part of a sudden session', () => {
-    const s = summaryFor(SUDDEN_45_V1);
+    const s = summaryFor(SUDDEN_45_V2);
     expect(s.metric).toBe('hand.initialDirectionErrorDeg');
     expect(s.trialsScheduled).toBe(40);
     expect(s.trialsValid).toBe(40);
@@ -333,15 +447,15 @@ describe('per-participant summary', () => {
   });
 
   it('reports the mean rotation actually applied in the early window of a gradual session', () => {
-    const s = summaryFor(GRADUAL_45_V1);
+    const s = summaryFor(GRADUAL_45_V2);
     const step = 45 / 7;
     expect(s.earlyPerturbed.meanRotationDeg).toBeCloseTo((0 + step + 2 * step + 3 * step) / 4, 9);
     expect(s.latePerturbed.meanRotationDeg).toBe(45);
   });
 
   it('leaves invalid trials out of the means and counts them', () => {
-    const schedule = generateSchedule(SUDDEN_45_V1, 21);
-    const { engine } = runScriptedSession(SUDDEN_45_V1, schedule, aim);
+    const schedule = generateSchedule(SUDDEN_45_V2, 21);
+    const { engine } = runScriptedSession(SUDDEN_45_V2, schedule, aim);
     const trials: SummaryTrial[] = engine.getRecords().map((r, i) => {
       const metrics = computeTrialMetrics(asInput(r), geometry, criteria);
       return {

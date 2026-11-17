@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRADUAL_45_V1, QUICK_DEMO_45_V1, SUDDEN_45_V1, type PresetConfig } from './presets';
+import { GRADUAL_45_V2, QUICK_DEMO_45_V2, SUDDEN_45_V2, type PresetConfig } from './presets';
 import { generateSchedule, rotationForPerturbedReach, type TrialSpec } from './schedule';
 
 const SEEDS = [1, 2, 3, 42, 1234, 987654321, 0xdeadbeef];
@@ -10,7 +10,7 @@ const perturbed = (schedule: TrialSpec[]) => schedule.filter((t) => t.phase === 
 const catches = (schedule: TrialSpec[]) => schedule.filter((t) => t.isCatch);
 
 describe('standard 40-trial structure', () => {
-  for (const preset of [SUDDEN_45_V1, GRADUAL_45_V1]) {
+  for (const preset of [SUDDEN_45_V2, GRADUAL_45_V2]) {
     describe(preset.id, () => {
       const schedule = generateSchedule(preset, 42);
 
@@ -79,7 +79,7 @@ describe('standard 40-trial structure', () => {
 });
 
 describe('sudden preset', () => {
-  const schedule = generateSchedule(SUDDEN_45_V1, 7);
+  const schedule = generateSchedule(SUDDEN_45_V2, 7);
 
   it('applies +45° on every non-catch adaptation reach, from the very first', () => {
     const p = perturbed(schedule);
@@ -99,7 +99,7 @@ describe('sudden preset', () => {
 });
 
 describe('gradual preset: ramp and hold', () => {
-  const schedule = generateSchedule(GRADUAL_45_V1, 7);
+  const schedule = generateSchedule(GRADUAL_45_V2, 7);
   const angles = perturbed(schedule).map((t) => t.rotationDeg);
 
   it('first ramp reach applies exactly 0°', () => {
@@ -151,10 +151,10 @@ describe('gradual ramp: catch trials do not advance the ramp counter', () => {
   // Hypothetical preset with catch trials INSIDE the ramp, to prove the rule in
   // general (the canonical catch slots happen to fall after the ramp).
   const withCatchesInRamp: PresetConfig = {
-    ...GRADUAL_45_V1,
+    ...GRADUAL_45_V2,
     id: 'test-gradual-catch-in-ramp-v1',
     structure: {
-      ...GRADUAL_45_V1.structure,
+      ...GRADUAL_45_V2.structure,
       adaptation: { trials: 24, feedback: 'visible', catchSlots: [3, 6] },
     },
   };
@@ -162,7 +162,7 @@ describe('gradual ramp: catch trials do not advance the ramp counter', () => {
   const adaptation = phaseOf(schedule, 'adaptation');
 
   it('the non-catch reaches follow the identical ramp regardless of where catches fall', () => {
-    const reference = perturbed(generateSchedule(GRADUAL_45_V1, 11)).map((t) => t.rotationDeg);
+    const reference = perturbed(generateSchedule(GRADUAL_45_V2, 11)).map((t) => t.rotationDeg);
     expect(perturbed(schedule).map((t) => t.rotationDeg)).toEqual(reference);
   });
 
@@ -222,7 +222,7 @@ describe('8-target balance', () => {
   };
 
   it('each direction appears once in baseline, three times in adaptation, once in aftereffect', () => {
-    for (const preset of [SUDDEN_45_V1, GRADUAL_45_V1]) {
+    for (const preset of [SUDDEN_45_V2, GRADUAL_45_V2]) {
       for (const seed of SEEDS) {
         const schedule = generateSchedule(preset, seed);
         const expected: Array<[TrialSpec['phase'], number]> = [
@@ -240,26 +240,26 @@ describe('8-target balance', () => {
   });
 
   it('catch trials occupy ordinary slots of the balanced schedule (they are not extra trials)', () => {
-    const schedule = generateSchedule(SUDDEN_45_V1, 99);
+    const schedule = generateSchedule(SUDDEN_45_V2, 99);
     // Counting catch trials together with perturbed trials is what gives 3 per direction.
     const withoutCatch = countByTarget(perturbed(schedule));
     const total = [...withoutCatch.values()].reduce((a, b) => a + b, 0);
     expect(total).toBe(22);
     for (const c of catches(schedule)) {
-      expect(c.targetAngleDeg).toBe(SUDDEN_45_V1.structure.targetAnglesDeg[c.targetIndex]);
+      expect(c.targetAngleDeg).toBe(SUDDEN_45_V2.structure.targetAnglesDeg[c.targetIndex]);
     }
   });
 
   it('target index and angle always agree', () => {
-    const schedule = generateSchedule(GRADUAL_45_V1, 5);
+    const schedule = generateSchedule(GRADUAL_45_V2, 5);
     for (const t of schedule) {
-      expect(t.targetAngleDeg).toBe(GRADUAL_45_V1.structure.targetAnglesDeg[t.targetIndex]);
+      expect(t.targetAngleDeg).toBe(GRADUAL_45_V2.structure.targetAnglesDeg[t.targetIndex]);
     }
   });
 
   it('never presents the same direction twice in a row', () => {
     for (const seed of Array.from({ length: 200 }, (_, i) => i + 1)) {
-      const schedule = generateSchedule(SUDDEN_45_V1, seed);
+      const schedule = generateSchedule(SUDDEN_45_V2, seed);
       for (let i = 1; i < schedule.length; i++) {
         expect(schedule[i].targetIndex).not.toBe(schedule[i - 1].targetIndex);
       }
@@ -269,29 +269,29 @@ describe('8-target balance', () => {
 
 describe('reproducibility', () => {
   it('the same preset and seed give the identical schedule', () => {
-    expect(generateSchedule(SUDDEN_45_V1, 2024)).toEqual(generateSchedule(SUDDEN_45_V1, 2024));
+    expect(generateSchedule(SUDDEN_45_V2, 2024)).toEqual(generateSchedule(SUDDEN_45_V2, 2024));
   });
 
   it('different seeds give different target orders', () => {
-    const orders = new Set(SEEDS.map((s) => generateSchedule(SUDDEN_45_V1, s).map((t) => t.targetIndex).join(',')));
+    const orders = new Set(SEEDS.map((s) => generateSchedule(SUDDEN_45_V2, s).map((t) => t.targetIndex).join(',')));
     expect(orders.size).toBe(SEEDS.length);
   });
 
   it('sudden and gradual share the same target order for a given seed', () => {
-    const a = generateSchedule(SUDDEN_45_V1, 31337).map((t) => t.targetIndex);
-    const b = generateSchedule(GRADUAL_45_V1, 31337).map((t) => t.targetIndex);
+    const a = generateSchedule(SUDDEN_45_V2, 31337).map((t) => t.targetIndex);
+    const b = generateSchedule(GRADUAL_45_V2, 31337).map((t) => t.targetIndex);
     expect(a).toEqual(b);
   });
 
   it('the rotation schedule does not depend on the seed', () => {
-    const a = generateSchedule(GRADUAL_45_V1, 1).map((t) => t.rotationDeg);
-    const b = generateSchedule(GRADUAL_45_V1, 999).map((t) => t.rotationDeg);
+    const a = generateSchedule(GRADUAL_45_V2, 1).map((t) => t.rotationDeg);
+    const b = generateSchedule(GRADUAL_45_V2, 999).map((t) => t.rotationDeg);
     expect(a).toEqual(b);
   });
 });
 
 describe('Quick Demo preset', () => {
-  const schedule = generateSchedule(QUICK_DEMO_45_V1, 3);
+  const schedule = generateSchedule(QUICK_DEMO_45_V2, 3);
 
   it('has 4 baseline, 8 adaptation and 4 aftereffect trials', () => {
     expect(schedule).toHaveLength(16);

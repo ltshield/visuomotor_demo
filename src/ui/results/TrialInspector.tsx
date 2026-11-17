@@ -6,13 +6,19 @@
  * path and, when the cursor was shown, the displayed cursor path. On a rotated
  * reach the two visibly fan apart by the rotation angle.
  *
+ * Each path has two parts. The solid line is the OUTWARD REACH, up to the
+ * marker where the hand first got as far out as the target: that is what every
+ * number on the results page describes. The thin dashed line that follows is
+ * what happened next (steering onto the target and holding there); it is shown
+ * so the picture is complete, but nothing is measured from it.
+ *
  * Workspace coordinates are y-up; SVG is y-down, so every point is drawn at
  * (x, −y). That is the only axis flip in this file.
  *
  * Key export: `TrialInspector`.
  */
 
-import { outwardPath, type Path } from '../../core/analysis';
+import { outwardPath, settlePath, type Path } from '../../core/analysis';
 import { targetPosition } from '../../core/geometry';
 import { finalAttempts, reachDataOf, type SessionRecord, type TrialExport } from '../../core/record';
 import { formatDeg, formatSignedDeg } from '../presetText';
@@ -52,10 +58,15 @@ function labelPosition(end: { x: number; y: number }, gap: number, text: string,
 }
 
 function outcomeText(trial: TrialExport): string {
-  if (trial.outcome === 'timeout') return 'Timed out before reaching the target distance';
   if (trial.outcome === 'interrupted') return 'Interrupted (mouse released)';
-  if (!trial.valid) return 'Completed, but too few mouse samples to analyse';
-  return 'Completed';
+  if (trial.outcome === 'timeout') {
+    return trial.crossing
+      ? 'Reached the target distance, but time ran out before the hold registered'
+      : 'Timed out before reaching the target distance';
+  }
+  if (!trial.valid) return 'Registered, but too few mouse samples to analyse';
+  // With the cursor hidden only the distance had to be held, so the hand may have been well off the target.
+  return trial.cursorVisibleDuringReach ? 'Registered: cursor held on the target' : 'Registered: hand held at the target distance';
 }
 
 interface TrialInspectorProps {
@@ -73,6 +84,9 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
 
   const hand = outwardPath(reachDataOf(trial), 'hand');
   const cursor = outwardPath(reachDataOf(trial), 'cursor');
+  // What followed arrival (not measured). Hidden with the paths of reaches that were not analysed.
+  const handAfter = trial.valid ? settlePath(reachDataOf(trial), 'hand') : null;
+  const cursorAfter = trial.valid ? settlePath(reachDataOf(trial), 'cursor') : null;
   const target = targetPosition(trial.targetAngleDeg, g.targetDistance);
   const earlierAttempts = session.trials.filter((t) => t.trialNumber === trial.trialNumber && !t.isFinalAttempt).length;
 
@@ -83,6 +97,9 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
 
   const legend: LegendItem[] = [{ key: 'line', color: VIZ.move, label: 'Hand (mouse) path' }];
   if (cursor) legend.push({ key: 'line', color: VIZ.cursor, label: 'Cursor path as displayed' });
+  if (handAfter || cursorAfter) {
+    legend.push({ key: 'dash', color: VIZ.context, label: 'After arriving: steering onto the target and holding (not measured)' });
+  }
 
   const m = trial.metrics;
   const direction = (deg: number | undefined) => (deg === undefined ? null : `${formatSignedDeg(deg)} (${describeDirection(deg)})`);
@@ -93,15 +110,21 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
     ['Cursor during the reach', trial.cursorVisibleDuringReach ? 'Visible' : 'Hidden'],
     ['Outcome', outcomeText(trial)],
     ['Reaction time', m.reactionTimeMs !== null ? `${Math.round(m.reactionTimeMs)} ms` : null],
-    ['Movement time', m.movementDurationMs !== null ? `${Math.round(m.movementDurationMs)} ms` : null],
+    ['Movement time', m.movementDurationMs !== null ? `${Math.round(m.movementDurationMs)} ms (start of movement to arrival)` : null],
+    [
+      'Hold registered',
+      trial.times.holdCompletionMs != null && trial.times.goCueMs !== null
+        ? `${Math.round(trial.times.holdCompletionMs - trial.times.goCueMs)} ms after the target lit`
+        : null,
+    ],
     ['Initial hand direction', direction(m.hand?.initialDirectionErrorDeg)],
-    ['Hand direction at the target distance', direction(m.hand?.endpointDirectionErrorDeg)],
+    ['Hand direction on arrival', direction(m.hand?.endpointDirectionErrorDeg)],
     [
       'Initial cursor direction',
       trial.cursorVisibleDuringReach ? direction(m.cursor?.initialDirectionErrorDeg) : 'Cursor hidden',
     ],
     [
-      'Cursor direction at the target distance',
+      'Cursor direction on arrival',
       trial.cursorVisibleDuringReach ? direction(m.cursor?.endpointDirectionErrorDeg) : 'Cursor hidden',
     ],
     [
@@ -111,7 +134,7 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
         : null,
     ],
     ['Hand path straightness', m.hand ? `${m.hand.pathEfficiency.toFixed(3)} (1 = perfectly straight)` : null],
-    ['Mouse samples in the reach', String(m.reachSampleCount)],
+    ['Mouse samples in the outward reach', String(m.reachSampleCount)],
   ];
 
   return (
@@ -167,6 +190,34 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
             {/* The straight line from start to the lit target. */}
             <line x1={0} y1={0} x2={target.x} y2={-target.y} stroke={VIZ.axis} strokeWidth={1.5} />
             <circle cx={0} cy={0} r={g.startRadius} fill={VIZ.surface} stroke={VIZ.muted} strokeWidth={1.5} />
+
+            {/* After arrival: thin and dashed, drawn first so the measured paths sit on top. */}
+            {handAfter && (
+              <polyline
+                className="inspector-after"
+                points={pathPoints(handAfter)}
+                fill="none"
+                stroke={VIZ.move}
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                opacity={0.7}
+              />
+            )}
+            {cursorAfter && !identical && (
+              <polyline
+                className="inspector-after"
+                points={pathPoints(cursorAfter)}
+                fill="none"
+                stroke={VIZ.cursor}
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                opacity={0.8}
+              />
+            )}
 
             {hand && (
               <>
@@ -225,6 +276,13 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
           )}
           {!trial.cursorVisibleDuringReach && (
             <p className="viz-footnote">The cursor was hidden during this reach, so only the hand path exists.</p>
+          )}
+          {(handAfter || cursorAfter) && (
+            <p className="viz-footnote">
+              The round marker is where the hand first got as far out as the target (arrival); the measurements stop
+              there. The dashed line shows what followed
+              {trial.cursorVisibleDuringReach ? ': bringing the cursor onto the target and holding it.' : ' while the reach was being held.'}
+            </p>
           )}
           {!trial.valid && (
             <p className="viz-footnote">

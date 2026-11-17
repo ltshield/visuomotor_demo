@@ -133,9 +133,13 @@ export function normalizedPath(trial: TrialExport, kind: PathKind, targetDistanc
 
 /** Why `normalizedPath` returned null, in words. */
 export function unavailableReason(trial: TrialExport, kind: PathKind): string {
-  if (trial.outcome === 'timeout') return 'timed out';
-  if (trial.outcome === 'interrupted') return 'interrupted';
-  if (!trial.valid) return 'too few samples';
+  if (!trial.valid) {
+    // An invalid timeout is one where the hand never arrived. (A reach that
+    // arrived and then ran out of time is valid and is drawn like any other.)
+    if (trial.outcome === 'timeout') return 'timed out';
+    if (trial.outcome === 'interrupted') return 'interrupted';
+    return 'too few samples';
+  }
   if (kind === 'cursor' && !trial.cursorVisibleDuringReach) return 'cursor was hidden';
   return 'not available';
 }

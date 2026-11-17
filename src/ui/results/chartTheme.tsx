@@ -59,7 +59,7 @@ export function SeriesDot({ cx, cy, isCatch, active = false }: { cx: number; cy:
   return <circle cx={cx} cy={cy} r={active ? 5.5 : 4} fill={VIZ.move} stroke={VIZ.surface} strokeWidth={2} />;
 }
 
-export type LegendKey = 'line' | 'dot' | 'diamond' | 'band';
+export type LegendKey = 'line' | 'dash' | 'dot' | 'diamond' | 'band';
 
 export interface LegendItem {
   key: LegendKey;
@@ -72,6 +72,9 @@ function LegendMark({ item }: { item: LegendItem }) {
   return (
     <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true" focusable="false">
       {item.key === 'line' && <line x1="1" y1="6" x2="21" y2="6" stroke={item.color} strokeWidth="2" strokeLinecap="round" />}
+      {item.key === 'dash' && (
+        <line x1="1" y1="6" x2="21" y2="6" stroke={item.color} strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round" />
+      )}
       {item.key === 'dot' && <circle cx="11" cy="6" r="4" fill={item.color} />}
       {item.key === 'diamond' && <polygon points={diamondPoints(11, 6, 5.5)} fill={item.color} />}
       {item.key === 'band' && <rect x="1" y="1" width="20" height="10" rx="2" fill={item.color} stroke={VIZ.axis} />}

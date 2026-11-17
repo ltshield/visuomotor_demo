@@ -5,7 +5,7 @@
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { GRADUAL_45_V1, SUDDEN_45_V1 } from '../core/presets';
+import { GRADUAL_45_V2, SUDDEN_45_V2 } from '../core/presets';
 import { generateSchedule } from '../core/schedule';
 import { Instructor } from './Instructor';
 import { Reflection } from './Reflection';
@@ -88,7 +88,25 @@ describe('Task screen', () => {
     }
   });
 
-  for (const preset of [SUDDEN_45_V1, GRADUAL_45_V1]) {
+  it('the instructions describe holding on the target and the jump back to the center', () => {
+    expect(TASK_MESSAGES['reach-first']).toMatch(/hold it there until the target flashes/);
+    expect(TASK_MESSAGES.center).toMatch(/jumps back to the center/);
+    expect(TASK_MESSAGES['hidden-reach']).toMatch(/hold still until it flashes/);
+    // Nothing still tells people to slice through a target.
+    for (const message of Object.values(TASK_MESSAGES)) expect(message).not.toMatch(/slice|through it/i);
+  });
+
+  it('offers a sound control that names its key and gives nothing away', () => {
+    const { container } = render(
+      <TaskScreen preset={SUDDEN_45_V2} schedule={generateSchedule(SUDDEN_45_V2, 3)} onComplete={() => {}} onQuit={() => {}} />,
+    );
+    const toggle = container.querySelector('.sound-toggle') as HTMLButtonElement;
+    expect(toggle.textContent).toBe('Sound on · press M to mute');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.textContent).not.toMatch(REVEALING);
+  });
+
+  for (const preset of [SUDDEN_45_V2, GRADUAL_45_V2]) {
     it(`renders nothing that identifies ${preset.id}`, () => {
       const schedule = generateSchedule(preset, 3);
       const { container } = render(
@@ -106,8 +124,8 @@ describe('Task screen', () => {
   it('renders identical markup for the sudden and gradual presets', () => {
     const a = render(
       <TaskScreen
-        preset={SUDDEN_45_V1}
-        schedule={generateSchedule(SUDDEN_45_V1, 3)}
+        preset={SUDDEN_45_V2}
+        schedule={generateSchedule(SUDDEN_45_V2, 3)}
         onComplete={() => {}}
         onQuit={() => {}}
       />,
@@ -116,8 +134,8 @@ describe('Task screen', () => {
     a.unmount();
     const b = render(
       <TaskScreen
-        preset={GRADUAL_45_V1}
-        schedule={generateSchedule(GRADUAL_45_V1, 3)}
+        preset={GRADUAL_45_V2}
+        schedule={generateSchedule(GRADUAL_45_V2, 3)}
         onComplete={() => {}}
         onQuit={() => {}}
       />,
@@ -164,9 +182,9 @@ describe('Instructor page', () => {
     render(<Instructor />);
     fireEvent.click(screen.getByRole('button', { name: /I am an instructor/ }));
     const text = document.body.textContent ?? '';
-    expect(text).toContain('rotation-sudden-45-v1');
-    expect(text).toContain('rotation-gradual-45-v1');
-    expect(text).toContain('rotation-quickdemo-45-v1');
+    expect(text).toContain('rotation-sudden-45-v2');
+    expect(text).toContain('rotation-gradual-45-v2');
+    expect(text).toContain('rotation-quickdemo-45-v2');
     expect(text).toMatch(/6\.43°/); // the gradual ramp step is spelled out
 
     const value = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;

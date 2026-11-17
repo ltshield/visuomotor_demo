@@ -3,14 +3,20 @@
  *
  * `EngineDriver` feeds the engine evenly spaced mouse samples and frame ticks
  * on a simulated clock, so tests can express a trial in a few readable lines
- * (`driver.center(); driver.reach(45);`). It is test support only and is never
- * imported by application code.
+ * (`driver.center(); driver.reach(45); driver.settle();`). It is test support
+ * only and is never imported by application code.
+ *
+ * A scripted trial has the same two parts as a real one:
+ *   reach   a straight outward movement of the HAND in a chosen direction. This
+ *           is what the metrics describe (initial direction, arrival point).
+ *   settle  if that did not leave the visible cursor on the target, steer it
+ *           there and hold still until the reach registers.
  *
  * Key exports: `EngineDriver`, `runScriptedSession`, `taskResultFrom`,
  * `scriptedSessionRecord`.
  */
 
-import { unitFromAngleDeg } from './geometry';
+import { rotate, targetPosition, unitFromAngleDeg, type Vec2 } from './geometry';
 import { TrialEngine, type EngineConfig, type EngineTrial } from './engine';
 import { assignPreset } from './assignment';
 import type { PresetConfig } from './presets';
@@ -21,9 +27,9 @@ import { createSessionPlan, type TaskResult } from './session';
 const FRAME_MS = 16;
 
 export interface ReachOptions {
-  /** How far the hand travels in total (default: 8% beyond the target distance). */
+  /** How far the hand travels on the outward movement (default: 4% beyond the target distance, still inside the target). */
   distance?: number;
-  /** Duration of the movement in ms (default 300). */
+  /** Duration of the outward movement in ms (default 300). */
   durationMs?: number;
   /** Interval between mouse samples in ms (default 4, i.e. 250 Hz). */
   sampleMs?: number;
@@ -32,11 +38,18 @@ export interface ReachOptions {
 export class EngineDriver<T extends EngineTrial = EngineTrial> {
   /** Simulated monotonic clock (ms). */
   t: number;
+  /** Where the driver has moved the hand since the last go cue (the engine anchors the hand at the origin there). */
+  private hand: Vec2 = { x: 0, y: 0 };
 
+  /**
+   * @param trials the same list the engine was given; needed only by `settle()`,
+   *               which must know where the current target is.
+   */
   constructor(
     readonly engine: TrialEngine<T>,
     readonly config: EngineConfig,
     startTimeMs = 0,
+    readonly trials: readonly T[] = [],
   ) {
     this.t = startTimeMs;
   }
@@ -63,25 +76,29 @@ export class EngineDriver<T extends EngineTrial = EngineTrial> {
     for (let i = 0; i < steps; i++) {
       this.t += durationMs / steps;
       this.engine.handleMove(dx / steps, dy / steps, this.t);
+      this.hand = { x: this.hand.x + dx / steps, y: this.hand.y + dy / steps };
       this.engine.tick(this.t);
       if (stopWhen?.()) return;
     }
   }
 
-  /** Bring the cursor to the start position and hold until the target appears. */
+  /** Bring the cursor to the start position (if it is not there already) and hold until the target appears. */
   center(): void {
     const { cursor } = this.engine.getView();
-    this.move(-cursor.x, -cursor.y, 200);
+    // After a reach the cursor has already jumped home, and a real mouse sends
+    // no events while it is still, so only move when there is somewhere to go.
+    if (Math.hypot(cursor.x, cursor.y) > 1e-9) this.move(-cursor.x, -cursor.y, 200);
     let guard = 0;
     while (this.phase !== 'reach') {
       this.wait(FRAME_MS);
       if (++guard > 2000) throw new Error(`go cue never arrived (phase: ${this.phase})`);
     }
+    this.hand = { x: 0, y: 0 }; // the engine anchored the hand at the go cue
   }
 
   /** A straight outward movement of the HAND along `handAngleDeg` (CCW from +x). */
   reach(handAngleDeg: number, options: ReachOptions = {}): void {
-    const distance = options.distance ?? this.config.geometry.targetDistance * 1.08;
+    const distance = options.distance ?? this.config.geometry.targetDistance * 1.04;
     const u = unitFromAngleDeg(handAngleDeg);
     this.move(
       u.x * distance,
@@ -90,6 +107,34 @@ export class EngineDriver<T extends EngineTrial = EngineTrial> {
       options.sampleMs ?? 4,
       () => this.phase !== 'reach',
     );
+  }
+
+  /**
+   * Finish a reach the way a participant would: if the cursor is visible and
+   * not on the target, steer it there; then keep still until the reach
+   * registers (or times out). With the cursor hidden there is nothing to steer
+   * by, so this only holds still — which is all a hidden reach needs.
+   */
+  settle(): void {
+    const view = this.engine.getView();
+    if (view.phase !== 'reach') return;
+    const trial = this.trials[view.trialsCompleted];
+    if (trial && view.cursorVisible) {
+      const g = this.config.geometry;
+      const target = targetPosition(trial.targetAngleDeg, g.targetDistance);
+      const offTarget = Math.hypot(view.cursor.x - target.x, view.cursor.y - target.y) > g.targetRadius;
+      if (offTarget) {
+        // The hand position that puts the cursor on the target's centre is the
+        // target position turned back through the rotation.
+        const goal = rotate(target, -trial.rotationDeg);
+        this.move(goal.x - this.hand.x, goal.y - this.hand.y, 120, 4, () => this.phase !== 'reach');
+      }
+    }
+    let guard = 0;
+    while (this.phase === 'reach') {
+      this.wait(FRAME_MS);
+      if (++guard > 2000) throw new Error('the reach never registered or timed out');
+    }
   }
 
   /** Wait until the post-reach pause is over. */
@@ -101,10 +146,11 @@ export class EngineDriver<T extends EngineTrial = EngineTrial> {
     }
   }
 
-  /** One whole trial: centre, hold, reach along `handAngleDeg`, sit out the pause. */
+  /** One whole trial: centre, hold, reach along `handAngleDeg`, settle on the target, sit out the pause. */
   trial(handAngleDeg: number, options: ReachOptions = {}): void {
     this.center();
     this.reach(handAngleDeg, options);
+    this.settle();
     this.finishFeedback();
   }
 }
@@ -162,9 +208,9 @@ export function engineConfigFor(preset: PresetConfig, repeatOnTimeout = false): 
 }
 
 /**
- * Runs a complete session with a participant whose hand direction on each
- * trial is `targetAngle + aimOffsetDeg(trial)`. Returns the engine and driver
- * so tests can inspect records.
+ * Runs a complete session with a participant whose hand sets off, on each
+ * trial, along `targetAngle + aimOffsetDeg(trial)` and then settles on the
+ * target. Returns the engine and driver so tests can inspect records.
  */
 export function runScriptedSession(
   preset: PresetConfig,
@@ -174,7 +220,7 @@ export function runScriptedSession(
 ): { engine: TrialEngine<TrialSpec>; driver: EngineDriver<TrialSpec> } {
   const config = engineConfigFor(preset);
   const engine = new TrialEngine<TrialSpec>(schedule, config, { startTimeMs: 1000, initialCursor: { x: 40, y: -30 } });
-  const driver = new EngineDriver(engine, config, 1000);
+  const driver = new EngineDriver(engine, config, 1000, schedule);
   for (const trial of schedule) {
     driver.trial(trial.targetAngleDeg + aimOffsetDeg(trial), options);
   }

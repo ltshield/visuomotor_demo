@@ -7,8 +7,10 @@
  * What it does, using trusted DevTools mouse input through real Pointer Lock:
  *   1. checks the welcome screen reveals nothing and starts the activity;
  *   2. completes the practice and every recorded trial with a simulated
- *      learner that sees only what a participant sees;
- *   3. releases the mouse mid-reach once and resumes (pause / repeat path);
+ *      learner that sees only what a participant sees: it reaches out, steers
+ *      the dot onto the target by eye, and holds until the reach registers;
+ *   3. releases the mouse mid-reach once and resumes (pause / repeat path),
+ *      and switches the sound off and on with the M key;
  *   4. checks nothing revealing is on screen during the task;
  *   5. answers the reflection questions, checks the reveal, exercises the
  *      results page, and downloads the JSON and both CSV files;
@@ -47,10 +49,10 @@ function option(name, fallback) {
 const flag = (name) => process.argv.includes(`--${name}`);
 
 const LINKS = {
-  general: { query: '', presetIds: ['rotation-sudden-45-v1', 'rotation-gradual-45-v1'], method: 'random-50-50' },
-  sudden: { query: '?c=k7m2', presetIds: ['rotation-sudden-45-v1'], method: 'direct-link' },
-  gradual: { query: '?c=p4x9', presetIds: ['rotation-gradual-45-v1'], method: 'direct-link' },
-  demo: { query: '?c=demo', presetIds: ['rotation-quickdemo-45-v1'], method: 'direct-link' },
+  general: { query: '', presetIds: ['rotation-sudden-45-v2', 'rotation-gradual-45-v2'], method: 'random-50-50' },
+  sudden: { query: '?c=k7m2', presetIds: ['rotation-sudden-45-v2'], method: 'direct-link' },
+  gradual: { query: '?c=p4x9', presetIds: ['rotation-gradual-45-v2'], method: 'direct-link' },
+  demo: { query: '?c=demo', presetIds: ['rotation-quickdemo-45-v2'], method: 'direct-link' },
 };
 
 const linkName = option('link', 'sudden');
@@ -148,6 +150,8 @@ try {
   console.log('\nPractice');
   let practiceReaches = 0;
   let hiddenPractice = 0;
+  let practiceHoldSeen = false;
+  let practiceConfirmations = 0;
   for (;;) {
     const seen = await participant.look();
     if (!seen || seen.stage !== 'practice') break;
@@ -158,11 +162,20 @@ try {
     const go = await participant.centerAndWaitForGo();
     if (!go.cursor.visible) hiddenPractice += 1;
     await participant.reach(go.targetAngle);
+    if (practiceReaches === 0) {
+      // Arriving on the target is not enough: it has to be held.
+      const arrived = await participant.waitFor((s) => s.targetHolding || s.phase !== 'reach', 'the dot to be on the target');
+      practiceHoldSeen = arrived.phase === 'reach' && arrived.targetHolding;
+    }
+    const done = await participant.settleOnTarget(go.targetAngle);
+    if (done && done.phase === 'feedback' && done.targetConfirmed) practiceConfirmations += 1;
     practiceReaches += 1;
     await participant.waitFor((s) => s.phase !== 'reach' && s.phase !== 'feedback', 'end of practice reach');
   }
   check('practice consists of 6 reaches', practiceReaches === 6, `${practiceReaches} reaches`);
   check('practice includes no-feedback reaches', hiddenPractice === 2, `${hiddenPractice} with the dot hidden`);
+  check('a reach does not register on arrival: the target shows it is being held first', practiceHoldSeen);
+  check('the target pulses when a practice reach registers', practiceConfirmations >= 5, `${practiceConfirmations} of 6 seen`);
   await page.screenshot({ path: path.join(outDir, '02-practice-complete.png') });
 
   await participant.click();
@@ -176,6 +189,9 @@ try {
   let revealedDuringTask = false;
   let interruptionDone = false;
   let sawProgressBar = false;
+  let jumpsHome = 0;
+  let hiddenDotShownAfterReach = false;
+  let soundToggleOk = null;
   const interruptAtTrial = linkName === 'demo' ? 7 : 15;
 
   for (;;) {
@@ -214,16 +230,32 @@ try {
       continue; // the interrupted trial is presented again
     }
 
-    await participant.reach(go.targetAngle + learner.aim);
-    seen = await participant.waitFor((s) => s.phase !== 'reach', 'the reach to register');
+    // Once, switch the sound off and on again with the M key (the only control that works while captured).
+    if (soundToggleOk === null && trialNumber === 2) {
+      const pressed = () => page.locator('.sound-toggle').getAttribute('aria-pressed');
+      const before = await pressed();
+      await page.keyboard.press('m');
+      const muted = await pressed();
+      await page.keyboard.press('m');
+      soundToggleOk = before === 'true' && muted === 'false' && (await pressed()) === 'true';
+    }
 
-    // What the participant could see of the outcome: where the frozen dot sits relative to the target.
+    // 1. The outward movement, straight along the participant's current aim.
+    const aimDeg = learner.aim;
+    await participant.reach(go.targetAngle + aimDeg);
+    seen = await participant.look();
+
+    // What the participant could see of the outcome: where the dot ended up relative to the target.
     let cursorErrorDeg = null;
-    if (go.cursor.visible && seen.phase === 'feedback' && seen.cursor.visible) {
+    if (go.cursor.visible && seen && seen.cursor.visible) {
       const cursorAngle = (Math.atan2(seen.cursor.y, seen.cursor.x) * 180) / Math.PI;
       cursorErrorDeg = wrapDeg(cursorAngle - go.targetAngle);
     }
-    log.push({ trialNumber, targetAngle: go.targetAngle, cursorVisible: go.cursor.visible, aimDeg: learner.aim, cursorErrorDeg });
+
+    // 2. Steer the dot onto the target (if it can be seen) and hold until the reach registers.
+    seen = await participant.settleOnTarget(go.targetAngle, aimDeg);
+    if (!go.cursor.visible && seen && seen.cursor.visible) hiddenDotShownAfterReach = true;
+    log.push({ trialNumber, targetAngle: go.targetAngle, cursorVisible: go.cursor.visible, aimDeg, cursorErrorDeg, registered: !!seen && seen.phase === 'feedback' && seen.targetConfirmed });
     learner.update(cursorErrorDeg);
 
     if (trialNumber === 3 || trialNumber === 12) {
@@ -233,7 +265,12 @@ try {
     // Wait for this trial's pause to end (or for the whole task screen to disappear).
     for (;;) {
       const s = await participant.look();
-      if (!s || (s.phase !== 'feedback' && s.phase !== 'reach')) break;
+      if (!s) break;
+      if (s.phase !== 'feedback' && s.phase !== 'reach') {
+        // No return movement: the dot is simply back on the centre, visible, with no hand movement made.
+        if (s.cursor.visible && s.cursor.x === 0 && s.cursor.y === 0) jumpsHome += 1;
+        break;
+      }
       await sleep(15);
     }
   }
@@ -241,6 +278,10 @@ try {
   check('nothing revealing was shown during the task', !revealedDuringTask);
   check('a neutral progress bar was shown', sawProgressBar);
   check('one mid-reach interruption was exercised', interruptionDone);
+  check('every reach registered with a visible confirmation', log.every((t) => t.registered), `${log.filter((t) => t.registered).length} of ${log.length}`);
+  check('after every reach but the last the dot was back on the centre with no return movement', jumpsHome === log.length - 1, `${jumpsHome} of ${log.length - 1}`);
+  check('a hidden dot never reappeared where its reach ended', !hiddenDotShownAfterReach);
+  check('the M key switches the sound off and on while the mouse is captured', soundToggleOk === true);
 
   // ---- 4. Reflection --------------------------------------------------------
   console.log('\nReflection');
@@ -326,6 +367,18 @@ try {
   check('reflection answers are saved', session.reflection && session.reflection.changedAim === 'yes' && session.reflection.device === 'mouse');
   check('movement came from pointer events', session.environment.moveEventSource === 'pointermove', `${session.environment.moveSamples} samples from ${session.environment.moveEvents} events`);
   check('all final attempts are valid', finals.every((t) => t.valid), `${finals.filter((t) => t.valid).length} of ${finals.length}`);
+  check('every final attempt registered by holding', finals.every((t) => t.outcome === 'completed' && t.holdCompleted === true));
+  const holdMs = session.preset.timing.targetHoldMs;
+  const arrivalRadius = session.preset.geometry.targetDistance - session.preset.geometry.targetRadius;
+  check('the preset asks for a 400 ms target hold', holdMs === 400, `${holdMs} ms`);
+  check('reaches registered at least one full hold after arriving', finals.every((t) => t.times.holdCompletionMs - t.times.completionMs >= holdMs - 0.001));
+  check('arrival is recorded at the near edge of the target', finals.every((t) => t.crossing && t.crossing.radius === arrivalRadius && Math.abs(Math.hypot(t.crossing.handX, t.crossing.handY) - arrivalRadius) < 1e-6), `${arrivalRadius} units`);
+  check('visible-cursor reaches ended with the cursor inside the target', finals.filter((t) => t.cursorVisibleDuringReach).every((t) => {
+    const n = t.samples.reach.tMs.length - 1;
+    return Math.hypot(t.samples.reach.cursorX[n] - t.targetX, t.samples.reach.cursorY[n] - t.targetY) <= session.preset.geometry.targetRadius;
+  }));
+  check('no movement is recorded after a reach (the dot jumps home)', session.trials.every((t) => t.samples.postReach.tMs.length === 0));
+  check('schema and app are version 2', session.schemaVersion === '2.0.0' && session.app.version === '2.0.0');
 
   // Protocol as executed.
   const phases = (name) => finals.filter((t) => t.phase === name);
@@ -359,9 +412,11 @@ try {
     }
   });
   check('hand initial direction matches the aimed direction on every reach', worstInitial < 1.5, `worst difference ${worstInitial.toFixed(2)}°`);
-  check('hand endpoint direction matches the aimed direction on every reach', worstEndpoint < 0.75, `worst difference ${worstEndpoint.toFixed(2)}°`);
+  check('hand direction on arrival matches the aimed direction on every reach', worstEndpoint < 0.75, `worst difference ${worstEndpoint.toFixed(2)}°`);
   check('cursor direction equals hand direction plus the applied rotation', worstCursor < 0.75, `worst difference ${worstCursor.toFixed(2)}°`);
-  check('on-screen frozen cursor matched the recorded cursor endpoint', finals.every((t, i) => log[i].cursorErrorDeg === null || Math.abs(log[i].cursorErrorDeg - t.metrics.cursor.endpointDirectionErrorDeg) < 0.5));
+  check('the dot seen after the outward movement matched the recorded cursor direction on arrival', finals.every((t, i) => log[i].cursorErrorDeg === null || Math.abs(log[i].cursorErrorDeg - t.metrics.cursor.endpointDirectionErrorDeg) < 0.6));
+  // Steering onto the target afterwards must not leak into the metrics: path length stops at arrival.
+  check('path metrics stop at arrival, before the steering and the hold', finals.every((t) => t.metrics.hand.pathLength < arrivalRadius * 1.02 && t.crossing.sampleIndex < t.samples.reach.tMs.length));
 
   // CSV files.
   const trialLines = trialsFile.text.trimEnd().split('\n');

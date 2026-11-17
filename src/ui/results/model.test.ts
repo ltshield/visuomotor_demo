@@ -5,6 +5,7 @@
  * chart data unchanged.
  */
 import { describe, expect, it } from 'vitest';
+import { arrivalRadius } from '../../core/presets';
 import { finalAttempts, type SessionRecord } from '../../core/record';
 import type { TrialSpec } from '../../core/schedule';
 import { scriptedSessionRecord } from '../../core/testUtils';
@@ -33,6 +34,8 @@ const sudden = scriptedSessionRecord('k7m2', aim);
 const gradual = scriptedSessionRecord('p4x9', aim);
 const demo = scriptedSessionRecord('demo', aim);
 const D = sudden.preset.geometry.targetDistance;
+/** Where outward paths end, as a fraction of the target distance (the near edge of the target). */
+const ARRIVAL = arrivalRadius(sudden.preset.geometry, sudden.preset.timing) / D;
 
 /** Copy of a session in which one trial has been turned into a timeout. */
 function withTimeout(session: SessionRecord, trialNumber: number): SessionRecord {
@@ -141,12 +144,13 @@ describe('trialPoints', () => {
 describe('normalizedPath', () => {
   const finals = finalAttempts(sudden);
 
-  it('starts at the origin and ends on the unit circle at the reach’s direction error', () => {
+  it('starts at the origin and ends on the arrival radius at the reach’s direction error', () => {
+    expect(ARRIVAL).toBeCloseTo(0.925, 9);
     for (const t of finals) {
       const path = normalizedPath(t, 'hand', D)!;
       expect(path[0]).toEqual({ progress: 0, lateral: 0 });
       const end = path[path.length - 1];
-      expect(Math.hypot(end.progress, end.lateral)).toBeCloseTo(1, 6);
+      expect(Math.hypot(end.progress, end.lateral)).toBeCloseTo(ARRIVAL, 6);
       expect(toDeg(Math.atan2(end.lateral, end.progress))).toBeCloseTo(aim(sudden.schedule[t.trialIndex]), 4);
     }
   });
@@ -167,10 +171,20 @@ describe('normalizedPath', () => {
     }
   });
 
-  it('is null for a reach that did not complete', () => {
+  it('is null for a reach that never arrived', () => {
     const t = finalAttempts(withTimeout(sudden, 9))[8];
     expect(normalizedPath(t, 'hand', D)).toBeNull();
     expect(unavailableReason(t, 'hand')).toBe('timed out');
+  });
+
+  it('still draws a reach that arrived but ran out of time before its hold registered', () => {
+    const original = finals[8];
+    const t = { ...original, outcome: 'timeout' as const, holdCompleted: false };
+    expect(normalizedPath(t, 'hand', D)).toEqual(normalizedPath(original, 'hand', D));
+    // In cursor view on a hidden trial the reason is the hidden cursor, not the timeout.
+    const hiddenTimeout = { ...finals[0], outcome: 'timeout' as const, holdCompleted: false };
+    expect(normalizedPath(hiddenTimeout, 'cursor', D)).toBeNull();
+    expect(unavailableReason(hiddenTimeout, 'cursor')).toBe('cursor was hidden');
   });
 });
 
@@ -301,13 +315,14 @@ describe('catchComparisons (lateral deviation against progress)', () => {
 
   it('plots the signed lateral deviation of the recorded hand path', () => {
     // The scripted hand moves in a straight line 35° clockwise of the target,
-    // so lateral = progress × tan(−35°), and the reach ends at cos(35°) ≈ 82% progress.
+    // so lateral = progress × tan(−35°), and the outward reach ends where it
+    // arrives: at 92.5% of the target distance, i.e. 0.925 × cos(35°) ≈ 76% progress.
     for (const c of comparisons) {
       for (const s of c.series) {
         for (const row of c.rows) {
           const p = row.progressPct as number;
           const value = row[s.dataKey];
-          if (p <= cosDeg(35) * 100 - 0.01) expect(value).toBeCloseTo(p * tanDeg(-35), 4);
+          if (p <= cosDeg(35) * ARRIVAL * 100 - 0.01) expect(value).toBeCloseTo(p * tanDeg(-35), 4);
           else expect(value).toBeNull();
         }
       }

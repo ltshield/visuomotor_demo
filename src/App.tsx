@@ -14,7 +14,7 @@ import {
   readSeedOverride,
   type Assignment,
 } from './core/assignment';
-import { QUICK_DEMO_45_V1, otherCanonicalPreset } from './core/presets';
+import { QUICK_DEMO_45_V2, otherCanonicalPreset } from './core/presets';
 import { buildSessionRecord, withReflection, type SessionRecord } from './core/record';
 import { newSessionId, randomSeed, secureRandom } from './core/rng';
 import { createSessionPlan, type SessionPlan } from './core/session';
@@ -22,6 +22,7 @@ import { getPointerInput } from './input/pointerLock';
 import { Instructor } from './ui/Instructor';
 import { Reflection } from './ui/Reflection';
 import { ResultsPage } from './ui/results/ResultsPage';
+import { getSoundCues } from './ui/sound';
 import { TaskScreen } from './ui/TaskScreen';
 import { Welcome } from './ui/Welcome';
 
@@ -50,16 +51,17 @@ export function App() {
   const [completedPresetIds, setCompletedPresetIds] = useState<string[]>([]);
 
   const linkCode = readLinkCode(window.location.search);
-  const quickDemo = linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V1.id;
+  const quickDemo = linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V2.id;
 
   // Each screen starts at the top of the page.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen.name]);
 
-  /** Must be called directly from a click handler: pointer lock needs the user gesture. */
+  /** Must be called directly from a click handler: pointer lock and audio both need the user gesture. */
   const startSession = (assignment: Assignment, skipPractice: boolean) => {
     getPointerInput().request();
+    getSoundCues().unlock();
     const plan = createSessionPlan({
       assignment,
       seed: readSeedOverride(window.location.search) ?? randomSeed(),

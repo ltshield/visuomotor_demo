@@ -81,9 +81,10 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
         </li>
         <li>
           <strong>Washout.</strong> Washout is the gradual return toward baseline once normal feedback is restored.
-          There was no separate washout block here. In the last block, though, the cursor reappeared for each return to
-          the center, which showed roughly where your reach had ended. That alone can make an aftereffect fade across
-          those reaches, and repeated aftereffect reaches with the cursor fully visible would wash it out faster still.
+          There was no separate washout block here. In the last block the cursor stayed hidden for each whole reach and
+          then simply reappeared at the center, so you were never shown where those reaches ended. An aftereffect can
+          still fade over repeated reaches, and reaches made with the cursor fully visible would wash it out much
+          faster.
         </li>
       </ul>
 

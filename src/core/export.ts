@@ -13,8 +13,8 @@
  * `exportFileNames`, `toPrettyJson`.
  */
 
-import { alignPath, outwardPath, type PathMetrics } from './analysis';
-import { reachDataOf, type SessionRecord, type TrialExport } from './record';
+import { alignPath, type PathMetrics } from './analysis';
+import type { SessionRecord } from './record';
 
 // ---------------------------------------------------------------------------
 // JSON
@@ -143,11 +143,13 @@ export const TRIALS_CSV_HEADER: string[] = [
   'feedback',
   'cursor_visible_during_reach',
   'outcome',
+  'hold_completed',
   'valid',
   'invalid_reason',
   'go_cue_ms',
   'movement_onset_ms',
   'completion_ms',
+  'hold_completion_ms',
   'reaction_time_ms',
   'movement_duration_ms',
   'reach_sample_count',
@@ -157,9 +159,16 @@ export const TRIALS_CSV_HEADER: string[] = [
   'crossing_hand_y',
   'crossing_cursor_x',
   'crossing_cursor_y',
+  'arrival_radius',
 ];
 
-/** One row per attempt (including interrupted and timed-out ones, flagged as such). */
+/**
+ * One row per attempt (including interrupted and timed-out ones, flagged as such).
+ *
+ * `completion_ms` is ARRIVAL (the hand first reached `arrival_radius`), which
+ * is what `movement_duration_ms` and every path metric are measured to.
+ * `hold_completion_ms` is when the reach registered after the target hold.
+ */
 export function trialsToCsv(session: SessionRecord): string {
   const rows = session.trials.map((t): Cell[] => [
     session.sessionId,
@@ -185,11 +194,13 @@ export function trialsToCsv(session: SessionRecord): string {
     t.feedback,
     t.cursorVisibleDuringReach,
     t.outcome,
+    t.holdCompleted,
     t.valid,
     t.invalidReason,
     t.times.goCueMs,
     t.times.movementOnsetMs,
     t.times.completionMs,
+    t.times.holdCompletionMs,
     t.metrics.reactionTimeMs,
     t.metrics.movementDurationMs,
     t.metrics.reachSampleCount,
@@ -199,6 +210,7 @@ export function trialsToCsv(session: SessionRecord): string {
     t.crossing?.handY,
     t.crossing?.cursorX,
     t.crossing?.cursorY,
+    t.crossing?.radius,
   ]);
   return toCsv(TRIALS_CSV_HEADER, rows);
 }
@@ -228,11 +240,14 @@ export const EVENTS_CSV_HEADER: string[] = [
  * One row per recorded mouse sample.
  *
  * `segment` says which part of the attempt the sample belongs to:
- *   pre_reach  — returning to and holding at the centre (cursor = hand)
- *   reach      — the outward reach (the only segment used for metrics)
- *   post_reach — the pause after the reach (cursor frozen, or hidden)
+ *   pre_reach  — at the centre before the go cue (cursor = hand)
+ *   reach      — the outward reach, go cue → arrival (the only segment used for metrics)
+ *   settle     — after arrival: steering onto the target and holding there
+ * `reach` and `settle` share one coordinate frame and one running `sample_index`,
+ * so together they are the whole recorded movement of the reach phase. An
+ * attempt in which the hand never arrived has no `settle` rows.
  * The `*_progress` / `*_lateral` columns are target-aligned coordinates and are
- * filled for reach samples only.
+ * filled for `reach` and `settle` samples.
  */
 export function eventsToCsv(session: SessionRecord): string {
   const rows: Cell[][] = [];
@@ -260,9 +275,11 @@ export function eventsToCsv(session: SessionRecord): string {
       reach.cursorX && reach.cursorY
         ? alignPath({ x: reach.cursorX, y: reach.cursorY, tMs: reach.tMs }, t.targetAngleDeg)
         : null;
+    // The first sample at or beyond the arrival radius opens the `settle` segment.
+    const settleFrom = t.crossing ? t.crossing.sampleIndex : Infinity;
     for (let i = 0; i < reach.tMs.length; i++) {
       rows.push([
-        ...base('reach', i, reach.tMs[i]),
+        ...base(i >= settleFrom ? 'settle' : 'reach', i, reach.tMs[i]),
         reach.dx[i],
         reach.dy[i],
         reach.handX[i],
@@ -276,44 +293,16 @@ export function eventsToCsv(session: SessionRecord): string {
         cursor ? cursor.lateral[i] : null,
       ]);
     }
-
-    // During the pause a visible cursor stays frozen where the reach ended.
-    const frozen = frozenCursor(t);
-    const post = t.samples.postReach;
-    for (let i = 0; i < post.tMs.length; i++) {
-      rows.push([
-        ...base('post_reach', i, post.tMs[i]),
-        post.dx[i],
-        post.dy[i],
-        post.x[i],
-        post.y[i],
-        frozen ? frozen.x : null,
-        frozen ? frozen.y : null,
-        t.cursorVisibleDuringReach,
-        null,
-        null,
-        null,
-        null,
-      ]);
-    }
+    // `samples.postReach` is always empty since schema 2, so it contributes no rows.
   }
   return toCsv(EVENTS_CSV_HEADER, rows);
-}
-
-/** Where a visible cursor sat during the post-reach pause: the crossing point, or its last position on a timeout. */
-function frozenCursor(t: TrialExport): { x: number; y: number } | null {
-  if (!t.cursorVisibleDuringReach) return null;
-  const path = outwardPath(reachDataOf(t), 'cursor');
-  if (!path || path.x.length === 0) return null;
-  const last = path.x.length - 1;
-  return { x: path.x[last], y: path.y[last] };
 }
 
 // ---------------------------------------------------------------------------
 // File names
 // ---------------------------------------------------------------------------
 
-/** Names like `motor-learning_rotation-sudden-45-v1_20261114-1530_session.json` (UTC time of the session). */
+/** Names like `motor-learning_rotation-sudden-45-v2_20261114-1530_session.json` (UTC time of the session). */
 export function exportFileNames(session: SessionRecord): { json: string; trialsCsv: string; eventsCsv: string } {
   const stamp = session.createdAtIso.replace(/[-:]/g, '').replace('T', '-').slice(0, 13);
   const stem = `motor-learning_${session.preset.id}_${stamp}`;

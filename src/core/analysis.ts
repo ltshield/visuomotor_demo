@@ -15,14 +15,21 @@
  * when looking from the start toward the target. With a +45° cursor rotation,
  * a hand that fully compensates has a direction error of −45°.
  *
- * WHICH PART OF THE MOVEMENT. Only the outward reach is analysed: from the go
- * cue to the interpolated point where the path crossed the target distance.
- * Return movements are never included.
+ * WHICH PART OF THE MOVEMENT. Only the OUTWARD REACH is analysed: from the go
+ * cue to ARRIVAL, the interpolated point where the hand first reached the
+ * arrival radius (`presets.arrivalRadius`: the near edge of the target when a
+ * target hold is required, the target distance itself otherwise). What comes
+ * after arrival — steering onto the target and holding there — is recorded but
+ * never enters a metric, so path length, endpoint error and movement time do
+ * not depend on how long someone took to settle.
  *
- * NULLS, NOT GUESSES. Timed-out, interrupted or degenerate reaches get
- * `valid: false`, a `nullReason`, and null metrics.
+ * NULLS, NOT GUESSES. A reach that never arrived (timed out short of the
+ * arrival radius), was interrupted, or has too few samples gets
+ * `valid: false`, a `nullReason`, and null metrics. A reach that DID arrive is
+ * analysed even if its hold never registered before the time limit: its
+ * outward movement is complete and perfectly measurable.
  *
- * Key exports: `computeTrialMetrics`, `outwardPath`, `alignPath`,
+ * Key exports: `computeTrialMetrics`, `outwardPath`, `settlePath`, `alignPath`,
  * `groupTrials`, `catchNeighbours`, `summarizeSession`, and their types.
  */
 
@@ -30,7 +37,11 @@ import type { CrossingPoint, ReachOutcome, ReachSamples } from './engine';
 import { cross, dot, lerp, norm, segmentCircleCrossing, signedAngleDeg, sub, unitFromAngleDeg, type Vec2 } from './geometry';
 import type { MovementCriteria, PhaseName, TaskGeometry } from './presets';
 
-/** Why a trial has no metrics. */
+/**
+ * Why a trial has no metrics.
+ * 'timeout' here means the time limit came before the hand ARRIVED. (A reach
+ * that arrived but whose hold never registered is analysed normally.)
+ */
 export type MetricsNullReason = 'timeout' | 'interrupted' | 'too-few-samples';
 
 /** Metrics of one path (the hand's, or the displayed cursor's). Lengths are in workspace units. */
@@ -42,7 +53,7 @@ export interface PathMetrics {
    * corrections can act. Degrees, + = counterclockwise.
    */
   initialDirectionErrorDeg: number;
-  /** Direction error at the point where the path crossed the target distance. Degrees, + = counterclockwise. */
+  /** Direction error at arrival, the point where the path first reached the arrival radius. Degrees, + = counterclockwise. */
   endpointDirectionErrorDeg: number;
   /** Largest distance of the path from the target axis. */
   maxAbsLateralDeviation: number;
@@ -57,14 +68,18 @@ export interface PathMetrics {
 }
 
 export interface TrialMetrics {
-  /** True when the reach completed normally and metrics could be computed. */
+  /** True when the hand arrived and metrics could be computed. */
   valid: boolean;
   nullReason: MetricsNullReason | null;
-  /** Number of recorded samples in the reach, including the go-cue sample. */
+  /**
+   * Number of recorded samples in the outward reach: the go-cue sample through
+   * the first sample at or beyond the arrival radius. (All recorded samples
+   * when the hand never arrived.)
+   */
   reachSampleCount: number;
   /** Go cue → movement onset (ms). */
   reactionTimeMs: number | null;
-  /** Movement onset → crossing the target distance (ms). */
+  /** Movement onset → arrival (ms). Does not include settling or the hold. */
   movementDurationMs: number | null;
   hand: PathMetrics | null;
   /** Null when the cursor was hidden during the reach. */
@@ -95,12 +110,25 @@ export interface ReachData {
 }
 
 /**
- * The outward path of the hand or the displayed cursor.
+ * Index of the first reach sample at or beyond the arrival radius, or null if
+ * the hand never arrived. Files written before schema 2 have no `sampleIndex`;
+ * there the reach ended at the crossing, so it is the last sample.
+ */
+function arrivalIndex(data: ReachData): number | null {
+  const n = data.reach.tMs.length;
+  if (!data.crossing || data.outcome === 'interrupted' || n < 2) return null;
+  const index = (data.crossing as Partial<CrossingPoint>).sampleIndex ?? n - 1;
+  return Math.min(n - 1, Math.max(1, index));
+}
+
+/**
+ * The OUTWARD path of the hand or the displayed cursor: go cue → arrival.
  *
- * For a completed reach the final recorded sample (the first one at or beyond
- * the target distance) is replaced by the interpolated crossing point, so the
- * path ends exactly on the target circle. For a timed-out or interrupted reach
- * the recorded samples are returned as they are (for display only).
+ * When the hand arrived, the first sample at or beyond the arrival radius is
+ * replaced by the interpolated arrival point, so the path ends exactly on the
+ * arrival radius; everything after it (settling and holding) is left out.
+ * When the hand never arrived, or the reach was interrupted, the recorded
+ * samples are returned as they are (for display only).
  * Returns null for the cursor when it was hidden.
  */
 export function outwardPath(data: ReachData, which: 'hand' | 'cursor'): Path | null {
@@ -108,19 +136,41 @@ export function outwardPath(data: ReachData, which: 'hand' | 'cursor'): Path | n
   const xs = which === 'hand' ? reach.handX : reach.cursorX;
   const ys = which === 'hand' ? reach.handY : reach.cursorY;
   if (!xs || !ys) return null;
-  const n = reach.tMs.length;
 
-  if (data.outcome === 'completed' && crossing && n >= 2) {
+  const end = arrivalIndex(data);
+  if (end !== null && crossing) {
     const endX = which === 'hand' ? crossing.handX : crossing.cursorX;
     const endY = which === 'hand' ? crossing.handY : crossing.cursorY;
     if (endX === null || endY === null) return null;
     return {
-      x: [...xs.slice(0, n - 1), endX],
-      y: [...ys.slice(0, n - 1), endY],
-      tMs: [...reach.tMs.slice(0, n - 1), crossing.tMs],
+      x: [...xs.slice(0, end), endX],
+      y: [...ys.slice(0, end), endY],
+      tMs: [...reach.tMs.slice(0, end), crossing.tMs],
     };
   }
   return { x: xs.slice(), y: ys.slice(), tMs: reach.tMs.slice() };
+}
+
+/**
+ * What happened AFTER arrival: steering onto the target and holding there (or
+ * running out of time). Starts at the arrival point, so it joins the end of
+ * `outwardPath`. For display only; no metric uses it. Null when the hand never
+ * arrived, when nothing was recorded after arrival, or for a hidden cursor.
+ */
+export function settlePath(data: ReachData, which: 'hand' | 'cursor'): Path | null {
+  const { reach, crossing } = data;
+  const xs = which === 'hand' ? reach.handX : reach.cursorX;
+  const ys = which === 'hand' ? reach.handY : reach.cursorY;
+  const start = arrivalIndex(data);
+  if (!xs || !ys || start === null || !crossing) return null;
+  const startX = which === 'hand' ? crossing.handX : crossing.cursorX;
+  const startY = which === 'hand' ? crossing.handY : crossing.cursorY;
+  if (startX === null || startY === null) return null;
+  return {
+    x: [startX, ...xs.slice(start)],
+    y: [startY, ...ys.slice(start)],
+    tMs: [crossing.tMs, ...reach.tMs.slice(start)],
+  };
 }
 
 /** Rotate a path into target-aligned coordinates (progress along the axis, signed lateral deviation). */
@@ -214,7 +264,10 @@ export function computeTrialMetrics(
   geometry: TaskGeometry,
   criteria: MovementCriteria,
 ): TrialMetrics {
-  const reachSampleCount = attempt.reach.tMs.length;
+  // Samples that make up the outward reach: up to and including the first one
+  // at or beyond the arrival radius. Settling and holding are not counted.
+  const arrivedAt = arrivalIndex(attempt);
+  const reachSampleCount = arrivedAt !== null ? arrivedAt + 1 : attempt.reach.tMs.length;
   const invalid = (nullReason: MetricsNullReason): TrialMetrics => ({
     valid: false,
     nullReason,
@@ -225,10 +278,12 @@ export function computeTrialMetrics(
     cursor: null,
   });
 
-  // A reach that did not finish has no defined endpoint; describing its shape
-  // with the same numbers as a finished reach would mislead.
-  if (attempt.outcome === 'timeout') return invalid('timeout');
+  // An interrupted reach is repeated; its partial movement is never analysed.
   if (attempt.outcome === 'interrupted') return invalid('interrupted');
+  // A reach that never arrived has no defined endpoint; describing its shape
+  // with the same numbers as a finished reach would mislead. (A reach that
+  // arrived and then ran out of time while settling IS analysed: see the header.)
+  if (arrivedAt === null) return invalid(attempt.outcome === 'timeout' ? 'timeout' : 'too-few-samples');
   // Too few samples to describe a trajectory (e.g. one enormous mouse jump).
   if (reachSampleCount < criteria.minReachSamples) return invalid('too-few-samples');
 

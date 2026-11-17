@@ -13,10 +13,12 @@ import { useState } from 'react';
 import { buildParticipantLink } from '../core/assignment';
 import {
   CANONICAL_PRESETS,
-  GRADUAL_45_V1,
-  QUICK_DEMO_45_V1,
-  SUDDEN_45_V1,
+  GRADUAL_45_V2,
+  QUICK_DEMO_45_V2,
+  SUDDEN_45_V2,
+  arrivalRadius,
   perturbedReachCount,
+  targetHoldMsOf,
   totalTrials,
   type PresetConfig,
 } from '../core/presets';
@@ -116,8 +118,10 @@ function PresetDefinition({ preset }: { preset: PresetConfig }) {
 export function Instructor() {
   const [revealed, setRevealed] = useState(false);
   const base = `${window.location.origin}${window.location.pathname}`;
-  const g = SUDDEN_45_V1.geometry;
-  const t = SUDDEN_45_V1.timing;
+  const g = SUDDEN_45_V2.geometry;
+  const t = SUDDEN_45_V2.timing;
+  const holdMs = targetHoldMsOf(t);
+  const arrival = arrivalRadius(g, t);
 
   if (!revealed) {
     return (
@@ -167,18 +171,18 @@ export function Instructor() {
         />
         <CopyableLink
           title="Direct link: Sudden version"
-          detail={`Every student who opens it gets ${SUDDEN_45_V1.id}.`}
-          url={buildParticipantLink(base, SUDDEN_45_V1.id)}
+          detail={`Every student who opens it gets ${SUDDEN_45_V2.id}.`}
+          url={buildParticipantLink(base, SUDDEN_45_V2.id)}
         />
         <CopyableLink
           title="Direct link: Gradual version"
-          detail={`Every student who opens it gets ${GRADUAL_45_V1.id}.`}
-          url={buildParticipantLink(base, GRADUAL_45_V1.id)}
+          detail={`Every student who opens it gets ${GRADUAL_45_V2.id}.`}
+          url={buildParticipantLink(base, GRADUAL_45_V2.id)}
         />
         <CopyableLink
           title="Quick Demo (optional)"
           detail="A 16-reach shortened version for a brief introduction. Labelled as a demo; not comparable with the standard versions."
-          url={buildParticipantLink(base, QUICK_DEMO_45_V1.id)}
+          url={buildParticipantLink(base, QUICK_DEMO_45_V2.id)}
         />
         <ul className="plain-list small" style={{ marginTop: 14 }}>
           <li>
@@ -199,7 +203,7 @@ export function Instructor() {
       ))}
 
       <h2>Optional short version</h2>
-      <PresetDefinition preset={QUICK_DEMO_45_V1} />
+      <PresetDefinition preset={QUICK_DEMO_45_V2} />
 
       <section className="card">
         <h2>Details that are the same for every version</h2>
@@ -212,16 +216,29 @@ export function Instructor() {
           <li>
             <strong>Transformation.</strong> During each outward reach,{' '}
             <code>cursor = start + R(θ) · (hand − start)</code>. Hand and cursor are re-anchored to the center at the
-            start of every reach, and the return to center always uses the normal mapping with the cursor visible.
+            start of every reach.
           </li>
           <li>
-            <strong>A reach ends</strong> when the hand has travelled the target distance ({g.targetDistance} workspace
-            units) in any direction, or after {t.reachTimeoutMs / 1000} s. It does not depend on hitting the target, so
-            hidden-cursor reaches end the same way as visible ones.
+            <strong>A reach registers</strong> when the student holds on the target for {holdMs} ms, or it times out
+            after {t.reachTimeoutMs / 1000} s. With the cursor visible, the cursor must stay inside the target circle
+            (radius {g.targetRadius} units); leaving it restarts the count. With the cursor hidden, the unseen hand
+            only has to stay at the target’s distance ({arrival} units or more from the center) in <em>any</em>{' '}
+            direction, because direction is exactly what those reaches measure: a student with a large aftereffect
+            still completes every reach and is never told they missed.
           </li>
           <li>
-            <strong>Pacing.</strong> A {t.holdMs} ms hold in the center ring starts each reach; the cursor stays frozen
-            for {t.feedbackHoldMs} ms where it crossed the target distance.
+            <strong>No return movement.</strong> When a reach registers the target pulses for {t.feedbackHoldMs} ms,
+            then the cursor jumps straight back to the center. Students never steer back, and after a hidden-cursor
+            reach they never see where it ended.
+          </li>
+          <li>
+            <strong>What is measured.</strong> Every reach metric runs from the moment the target lights to the
+            hand’s first arrival at {arrival} units from the center (the near edge of the target). Settling onto the
+            target and the hold are recorded but are not part of any metric.
+          </li>
+          <li>
+            <strong>Pacing.</strong> A {t.holdMs} ms hold in the center ring starts each reach. Two quiet sounds mark
+            the start of that hold and a registered reach; students can switch them off with the M key.
           </li>
           <li>
             <strong>Practice.</strong> Six unrecorded reaches with the normal mapping (four with the cursor visible, two
@@ -254,13 +271,14 @@ export function Instructor() {
         <h2>Please keep in mind</h2>
         <ul className="plain-list">
           <li>
-            These are teaching defaults, not optimized research protocols. With only {perturbedReachCount(SUDDEN_45_V1.structure)}{' '}
+            These are teaching defaults, not optimized research protocols. With only {perturbedReachCount(SUDDEN_45_V2.structure)}{' '}
             rotated reaches, an individual student may show little or no measurable learning or aftereffect.
           </li>
           <li>One student’s data cannot establish a difference between the sudden and gradual versions.</li>
           <li>
-            The cursor reappears for the return to center after each hidden-cursor reach, which shows roughly where that
-            reach ended. Aftereffects can therefore fade across the final block.
+            Reaches now end with a hold on the target, so students can correct with the cursor in view during the
+            rotation block. The initial-direction measure is taken early in the movement to capture the aim before
+            those corrections.
           </li>
         </ul>
       </section>

@@ -3,8 +3,9 @@
  *
  * This component is glue. All task rules live in `core/engine.ts`; here we
  *   1. feed the engine mouse deltas (via Pointer Lock) and frame ticks,
- *   2. draw what the engine's neutral `EngineView` describes, and
- *   3. show recovery instructions when the mouse is released.
+ *   2. draw what the engine's neutral `EngineView` describes,
+ *   3. play the two audio cues, and
+ *   4. show recovery instructions when the mouse is released.
  *
  * RENDERING. The cursor moves every frame, so it is drawn by writing SVG
  * attributes directly from a requestAnimationFrame loop rather than through
@@ -16,6 +17,13 @@
  *
  * CONCEALMENT. Nothing here reads a trial's phase, rotation or catch flag.
  * The screen shows a target, a dot and a plain progress bar — nothing else.
+ * The target's "holding" look and its confirmation pulse, like the two sounds,
+ * come straight from the engine's neutral view and are the same on every trial
+ * of every condition.
+ *
+ * SOUND. While the mouse is captured there is no pointer to click a button
+ * with, so sound is switched with the M key. The same control is also a real
+ * button for the moments when the mouse is free (pauses).
  *
  * Key export: `TaskScreen`.
  */
@@ -28,6 +36,7 @@ import type { PresetConfig } from '../core/presets';
 import type { TrialSpec } from '../core/schedule';
 import type { TaskResult } from '../core/session';
 import { getPointerInput, toWorkspaceDelta } from '../input/pointerLock';
+import { getSoundCues } from './sound';
 
 type Stage = 'practice' | 'ready' | 'experiment';
 type LockState = 'pending' | 'locked' | 'unlocked';
@@ -36,13 +45,13 @@ type LockState = 'pending' | 'locked' | 'unlocked';
 export const TASK_MESSAGES = {
   '': '',
   'center-first': 'Move the white dot into the ring at the center and hold it still.',
-  'reach-first': 'A target lit up. Slice the dot straight through it in one quick movement. Don’t stop on it.',
-  center: 'Bring the dot back to the center ring.',
-  reach: 'Slice through the lit target.',
+  'reach-first': 'A target lit up. Move the dot onto it and hold it there until the target flashes.',
+  center: 'The dot jumps back to the center after every reach. Keep it still in the ring until the next target lights up.',
+  reach: 'Move the dot onto the lit target and hold it there until it flashes.',
   'hidden-intro':
-    'Next, the dot will disappear while you reach. That is expected: reach through the target anyway. The dot comes back afterwards.',
-  'hidden-reach': 'The dot is hidden. Reach through the lit target anyway.',
-  timeout: 'Time ran out on that reach. Move all the way through the lit target in one quick movement.',
+    'Next, the dot will disappear while you reach. That is expected: reach out to the lit target anyway and hold still until it flashes. The dot comes back afterwards.',
+  'hidden-reach': 'The dot is hidden. Reach out to the lit target anyway, then hold still until it flashes.',
+  timeout: 'Time ran out on that reach. Move all the way out to the lit target and hold still there until it flashes.',
 } as const;
 type MessageKey = keyof typeof TASK_MESSAGES;
 
@@ -66,6 +75,7 @@ interface TaskScreenProps {
 
 export function TaskScreen({ preset, schedule, skipPractice = false, onComplete, onQuit }: TaskScreenProps) {
   const input = getPointerInput();
+  const sound = getSoundCues();
   const g = preset.geometry;
   const practiceTrials = useMemo(
     () => buildPracticeTrials(preset.structure.targetAnglesDeg),
@@ -80,6 +90,7 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
   const [practiceDone, setPracticeDone] = useState(0);
   /** True while the engine is paused (mouse released, or the window lost focus). */
   const [enginePaused, setEnginePaused] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(sound.muted);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -93,6 +104,22 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
+
+  // Sound on/off. The M key is the only control that works while the mouse is captured.
+  useEffect(() => {
+    const stop = sound.onChange(setSoundMuted);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== 'm' && e.key !== 'M') return;
+      sound.unlock(); // a key press is a user gesture, so this may also wake a suspended audio context
+      sound.toggleMuted();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      stop();
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [sound]);
 
   useEffect(() => {
     const config: EngineConfig = { geometry: preset.geometry, timing: preset.timing, criteria: preset.criteria };
@@ -123,6 +150,8 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
     // --- drawing state, to avoid redundant DOM writes ---
     let shownMessage: MessageKey = '';
     let shownTarget: number | null = null;
+    let shownHolding = false;
+    let shownConfirmed = false;
     let shownPhase = '';
     let shownProgress = -1;
     let shownPracticeDone = -1;
@@ -161,12 +190,33 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
           cursorEl.style.visibility = 'hidden';
         }
       }
+
+      // Lit target, plus its two transient looks: "holding" (the visible dot is
+      // sitting in it) and "confirmed" (the reach has just registered).
+      const holding = view.targetHoldFraction > 0;
       if (view.activeTargetIndex !== shownTarget) {
-        if (shownTarget !== null) targetRefs.current[shownTarget]?.classList.remove('is-active');
+        if (shownTarget !== null) {
+          targetRefs.current[shownTarget]?.classList.remove('is-active', 'is-holding', 'is-confirmed');
+        }
         if (view.activeTargetIndex !== null) targetRefs.current[view.activeTargetIndex]?.classList.add('is-active');
         shownTarget = view.activeTargetIndex;
+        shownHolding = false;
+        shownConfirmed = false;
       }
+      if (shownTarget !== null && holding !== shownHolding) {
+        targetRefs.current[shownTarget]?.classList.toggle('is-holding', holding);
+        shownHolding = holding;
+      }
+      if (shownTarget !== null && view.confirmed !== shownConfirmed) {
+        targetRefs.current[shownTarget]?.classList.toggle('is-confirmed', view.confirmed);
+        shownConfirmed = view.confirmed;
+      }
+
       if (view.phase !== shownPhase) {
+        // Audio cues ride on the same neutral phase changes as the visuals.
+        if (view.phase === 'hold') sound.dwellTick();
+        if (view.phase === 'feedback' && view.confirmed) sound.confirm();
+
         shownPhase = view.phase;
         // Engine phase only (acquire / hold / reach / …) — used for styling and automated browser tests.
         rootRef.current?.setAttribute('data-engine-phase', view.phase);
@@ -329,7 +379,7 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
       document.removeEventListener('contextmenu', blockContextMenu);
       input.clearListener();
     };
-  }, [input, preset, schedule, skipPractice, practiceTrials]);
+  }, [input, sound, preset, schedule, skipPractice, practiceTrials]);
 
   const half = g.boundsHalfExtent;
   const showLockPrompt = lockState === 'unlocked';
@@ -396,9 +446,9 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
             <div className="task-card">
               <h2>{skipPractice ? 'Ready?' : 'Practice complete'}</h2>
               <p>
-                The next part is recorded: a series of reaches lasting a few minutes. Keep slicing through each lit
-                target as accurately as you can. The dot may behave differently or disappear at times; that is part of
-                the activity, so just keep going.
+                The next part is recorded: a series of reaches lasting a few minutes. Keep moving the dot onto each lit
+                target as accurately as you can, and hold it there until the target flashes. The dot may behave
+                differently or disappear at times; that is part of the activity, so just keep going.
               </p>
               <p className="task-card-action">Click the mouse button to begin.</p>
             </div>
@@ -448,7 +498,21 @@ export function TaskScreen({ preset, schedule, skipPractice = false, onComplete,
         )}
       </div>
 
-      <div className="task-bottom">Press Esc to pause</div>
+      <div className="task-bottom">
+        <span>Press Esc to pause</span>
+        <button
+          type="button"
+          className="sound-toggle"
+          aria-pressed={!soundMuted}
+          aria-label={soundMuted ? 'Sound is off. Turn sound on' : 'Sound is on. Turn sound off'}
+          onClick={() => {
+            sound.unlock();
+            sound.toggleMuted();
+          }}
+        >
+          {soundMuted ? 'Sound off · press M to turn on' : 'Sound on · press M to mute'}
+        </button>
+      </div>
     </div>
   );
 }

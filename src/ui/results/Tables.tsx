@@ -129,7 +129,7 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
               <th className="num">Cursor rotation</th>
               <th>Cursor</th>
               <th className="num">Initial hand direction</th>
-              <th className="num">Hand direction at target distance</th>
+              <th className="num">Hand direction on arrival</th>
               <th className="num">Initial cursor direction</th>
               <th className="num">Reaction time (ms)</th>
               <th className="num">Movement time (ms)</th>
@@ -151,7 +151,7 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
                   <td className="num">{cell(p.cursorInitialDeg)}</td>
                   <td className="num">{m?.reactionTimeMs != null ? Math.round(m.reactionTimeMs) : ''}</td>
                   <td className="num">{m?.movementDurationMs != null ? Math.round(m.movementDurationMs) : ''}</td>
-                  <td>{p.valid ? '' : p.invalidReason === 'timeout' ? 'timed out' : (p.invalidReason ?? '')}</td>
+                  <td>{p.valid ? '' : p.invalidReason === 'timeout' ? 'timed out short of the target' : (p.invalidReason ?? '')}</td>
                 </tr>
               );
             })}

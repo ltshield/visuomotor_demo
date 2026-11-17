@@ -15,9 +15,9 @@
 
 import {
   CANONICAL_PRESETS,
-  GRADUAL_45_V1,
-  QUICK_DEMO_45_V1,
-  SUDDEN_45_V1,
+  GRADUAL_45_V2,
+  QUICK_DEMO_45_V2,
+  SUDDEN_45_V2,
   getPresetById,
   otherCanonicalPreset,
   type PresetConfig,
@@ -47,13 +47,17 @@ export const LINK_PARAM = 'c';
 
 /**
  * Link code → preset id. The two canonical codes are deliberately meaningless.
- * These are published in instructor materials: do not change or reuse a code.
+ * These are published in instructor materials: never reuse a code for a
+ * different CONDITION. A code names a condition ("the sudden one"), not one
+ * exact protocol version: when a preset is superseded (v1 → v2) its code moves
+ * to the new version, so links already handed out keep working and always run
+ * the current protocol. The exact version run is saved in every data file.
  * The Quick Demo is openly labelled as a demo, so its code is readable.
  */
 export const LINK_CODES: Readonly<Record<string, string>> = Object.freeze({
-  k7m2: SUDDEN_45_V1.id,
-  p4x9: GRADUAL_45_V1.id,
-  demo: QUICK_DEMO_45_V1.id,
+  k7m2: SUDDEN_45_V2.id,
+  p4x9: GRADUAL_45_V2.id,
+  demo: QUICK_DEMO_45_V2.id,
 });
 
 export function linkCodeForPreset(presetId: string): string | null {

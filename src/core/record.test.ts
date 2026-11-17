@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assignPreset } from './assignment';
 import { TrialEngine } from './engine';
 import { norm } from './geometry';
-import { GRADUAL_45_V1, SUDDEN_45_V1 } from './presets';
+import { GRADUAL_45_V2, SUDDEN_45_V2 } from './presets';
 import { SCHEMA_VERSION, buildSessionRecord, finalAttempts, reachDataOf, withReflection } from './record';
 import { generateSchedule, type TrialSpec } from './schedule';
 import { createSessionPlan, type SessionPlan } from './session';
@@ -32,19 +32,20 @@ describe('buildSessionRecord: session-level fields', () => {
 
   it('identifies the app, schema, preset and assignment', () => {
     expect(session.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(session.app).toEqual({ name: 'visuomotor-learning-lab', version: '1.0.0' });
+    expect(session.app).toEqual({ name: 'visuomotor-learning-lab', version: '2.0.0' });
+    expect(session.schemaVersion).toBe('2.0.0');
     expect(session.sessionId).toBe('test-session');
-    expect(session.preset).toEqual(SUDDEN_45_V1);
-    expect(session.preset.id).toBe('rotation-sudden-45-v1');
-    expect(session.preset.version).toBe(1);
-    expect(session.assignment).toMatchObject({ method: 'direct-link', presetId: 'rotation-sudden-45-v1' });
+    expect(session.preset).toEqual(SUDDEN_45_V2);
+    expect(session.preset.id).toBe('rotation-sudden-45-v2');
+    expect(session.preset.version).toBe(2);
+    expect(session.assignment).toMatchObject({ method: 'direct-link', presetId: 'rotation-sudden-45-v2' });
     expect(session.runNumber).toBe(1);
     expect(session.previousPresetIds).toEqual([]);
   });
 
   it('saves the seed and the exact schedule it produced', () => {
     expect(session.seed).toBe(77);
-    expect(session.schedule).toEqual(generateSchedule(SUDDEN_45_V1, 77));
+    expect(session.schedule).toEqual(generateSchedule(SUDDEN_45_V2, 77));
     expect(session.schedule.map((t) => t.targetIndex)).toEqual(finalAttempts(session).map((t) => t.targetIndex));
   });
 
@@ -52,6 +53,8 @@ describe('buildSessionRecord: session-level fields', () => {
     expect(session.conventions.rotation).toMatch(/cursor = start \+ R\(theta\)/);
     expect(session.conventions.directionError).toMatch(/counterclockwise/);
     expect(session.conventions.coordinates).toMatch(/\+y up/);
+    expect(session.conventions.arrival).toMatch(/crossing\.radius/);
+    expect(session.conventions.registering).toMatch(/targetHoldMs/);
   });
 
   it('reports durations and wall-clock times', () => {
@@ -79,7 +82,7 @@ describe('buildSessionRecord: session-level fields', () => {
 describe('buildSessionRecord: every trial records the required data', () => {
   for (const code of ['k7m2', 'p4x9'] as const) {
     const session = cleanSession(code);
-    const preset = code === 'k7m2' ? SUDDEN_45_V1 : GRADUAL_45_V1;
+    const preset = code === 'k7m2' ? SUDDEN_45_V2 : GRADUAL_45_V2;
 
     it(`${preset.id}: one final attempt per scheduled trial, matching the schedule`, () => {
       expect(session.trials).toHaveLength(40);
@@ -101,6 +104,7 @@ describe('buildSessionRecord: every trial records the required data', () => {
           feedback: spec.feedback,
           cursorVisibleDuringReach: spec.feedback === 'visible',
           outcome: 'completed',
+          holdCompleted: true,
           valid: true,
           invalidReason: null,
         });
@@ -129,13 +133,22 @@ describe('buildSessionRecord: every trial records the required data', () => {
         // Monotonic timestamps, starting at the go cue.
         expect(reach.tMs[0]).toBe(t.times.goCueMs);
         for (let i = 1; i < n; i++) expect(reach.tMs[i]).toBeGreaterThanOrEqual(reach.tMs[i - 1]);
-        expect(preReach.tMs.length).toBeGreaterThan(0);
+        // Only the first trial needs the cursor brought to the centre; afterwards it jumps there.
+        if (t.trialNumber === 1) expect(preReach.tMs.length).toBeGreaterThan(0);
+        // Nothing follows a reach any more: the field is kept, and always empty.
+        expect(t.samples.postReach).toEqual({ tMs: [], dx: [], dy: [], x: [], y: [] });
 
         expect(t.times.movementOnsetMs).not.toBeNull();
         expect(t.times.completionMs).not.toBeNull();
         expect(t.times.movementOnsetMs!).toBeGreaterThanOrEqual(t.times.goCueMs!);
         expect(t.times.completionMs!).toBeGreaterThan(t.times.movementOnsetMs!);
+        // The reach registers one full target hold after it was last entered, so after arrival.
+        expect(t.times.holdCompletionMs!).toBeGreaterThanOrEqual(t.times.completionMs! + preset.timing.targetHoldMs!);
         expect(t.crossing).not.toBeNull();
+        expect(t.crossing!.radius).toBe(222);
+        expect(t.crossing!.sampleIndex).toBeGreaterThan(0);
+        expect(t.crossing!.sampleIndex).toBeLessThan(n);
+        expect(t.crossing!.tMs).toBe(t.times.completionMs);
         expect(t.metrics.hand).not.toBeNull();
         expect(t.metrics.cursor === null).toBe(!t.cursorVisibleDuringReach);
       }
@@ -181,7 +194,7 @@ describe('buildSessionRecord: invalid attempts are kept and flagged', () => {
   const plan = planFor('k7m2', 5);
   const config = engineConfigFor(plan.preset);
   const engine = new TrialEngine<TrialSpec>(plan.schedule, config, { startTimeMs: 1000 });
-  const driver = new EngineDriver(engine, config, 1000);
+  const driver = new EngineDriver(engine, config, 1000, plan.schedule);
 
   for (const spec of plan.schedule) {
     if (spec.trialNumber === 5) {
@@ -195,6 +208,12 @@ describe('buildSessionRecord: invalid attempts are kept and flagged', () => {
     } else if (spec.trialNumber === 10) {
       // No movement at all: timeout.
       driver.center();
+      driver.wait(plan.preset.timing.reachTimeoutMs + 50);
+      driver.finishFeedback();
+    } else if (spec.trialNumber === 15) {
+      // Arrives 30 degrees off target and never settles the cursor: the hold does not register.
+      driver.center();
+      driver.reach(spec.targetAngleDeg - spec.rotationDeg + 30);
       driver.wait(plan.preset.timing.reachTimeoutMs + 50);
       driver.finishFeedback();
     } else {
@@ -217,9 +236,33 @@ describe('buildSessionRecord: invalid attempts are kept and flagged', () => {
   it('flags the timeout as invalid with null metrics, and does not repeat it', () => {
     const attempts = session.trials.filter((t) => t.trialNumber === 10);
     expect(attempts).toHaveLength(1);
-    expect(attempts[0]).toMatchObject({ outcome: 'timeout', valid: false, invalidReason: 'timeout', isFinalAttempt: true });
+    expect(attempts[0]).toMatchObject({
+      outcome: 'timeout',
+      holdCompleted: false,
+      valid: false,
+      invalidReason: 'timeout',
+      isFinalAttempt: true,
+    });
     expect(attempts[0].metrics).toMatchObject({ valid: false, nullReason: 'timeout', hand: null, cursor: null });
     expect(attempts[0].crossing).toBeNull();
+    expect(attempts[0].times.holdCompletionMs).toBeNull();
+  });
+
+  it('keeps and analyses a reach that arrived but whose hold never registered', () => {
+    const attempts = session.trials.filter((t) => t.trialNumber === 15);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      outcome: 'timeout',
+      holdCompleted: false,
+      valid: true,
+      invalidReason: null,
+      isFinalAttempt: true,
+    });
+    expect(attempts[0].crossing).not.toBeNull();
+    expect(attempts[0].times.completionMs).not.toBeNull();
+    expect(attempts[0].times.holdCompletionMs).toBeNull();
+    // The outward reach is described normally: 30 degrees counterclockwise of full compensation.
+    expect(attempts[0].metrics.hand!.initialDirectionErrorDeg).toBeCloseTo(30 - attempts[0].appliedRotationDeg, 4);
   });
 
   it('logs the interruption with the trial it hit', () => {

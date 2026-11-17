@@ -2,9 +2,9 @@
  * PathPanels.tsx — small-multiple overlays of target-aligned movement paths.
  *
  * Every panel uses the SAME axes: the start is at the bottom, the target
- * straight above it, and the faint arc is the target distance where each reach
- * ended. Paths are rotated into this frame so reaches to different targets can
- * be laid over one another.
+ * straight above it, and the faint arc is the arrival radius, where every
+ * outward path ends (the near edge of the target). Paths are rotated into this
+ * frame so reaches to different targets can be laid over one another.
  *
  * ORIENTATION. The picture is a rotation of the real workspace, not a mirror
  * image: a path that went counterclockwise of its target appears to the LEFT of
@@ -46,12 +46,16 @@ const ROLE_COLOR: Record<PathRole, string> = {
 /** Draw gray context first, then the reaches the panel is about, so they sit on top. */
 const DRAW_ORDER: Record<PathRole, number> = { context: 0, primary: 1, catch: 2 };
 
-/** The arc of the target distance, ±78° either side of the target axis. */
-function targetArc(): string {
+/**
+ * The arc on which outward paths end: `radius` (a fraction of the target
+ * distance) from the start, drawn ±78° either side of the target axis.
+ */
+function arrivalArc(radius: number): string {
   const a = (78 * Math.PI) / 180;
-  const left = toSvg({ progress: Math.cos(a), lateral: Math.sin(a) });
-  const right = toSvg({ progress: Math.cos(a), lateral: -Math.sin(a) });
-  return `M ${left.x.toFixed(1)} ${left.y.toFixed(1)} A ${SCALE} ${SCALE} 0 0 1 ${right.x.toFixed(1)} ${right.y.toFixed(1)}`;
+  const left = toSvg({ progress: radius * Math.cos(a), lateral: radius * Math.sin(a) });
+  const right = toSvg({ progress: radius * Math.cos(a), lateral: -radius * Math.sin(a) });
+  const r = (radius * SCALE).toFixed(1);
+  return `M ${left.x.toFixed(1)} ${left.y.toFixed(1)} A ${r} ${r} 0 0 1 ${right.x.toFixed(1)} ${right.y.toFixed(1)}`;
 }
 
 interface PanelProps {
@@ -59,10 +63,11 @@ interface PanelProps {
   kind: PathKind;
   targetRadius: number;
   startRadius: number;
+  arrivalRadius: number;
   onSelectTrial: (trialNumber: number) => void;
 }
 
-function Panel({ panel, kind, targetRadius, startRadius, onSelectTrial }: PanelProps) {
+function Panel({ panel, kind, targetRadius, startRadius, arrivalRadius, onSelectTrial }: PanelProps) {
   const [hovered, setHovered] = useState<number | null>(null);
   const ordered = panel.paths.slice().sort((a, b) => DRAW_ORDER[a.role] - DRAW_ORDER[b.role]);
   const active = ordered.find((p) => p.trialNumber === hovered) ?? null;
@@ -83,12 +88,12 @@ function Panel({ panel, kind, targetRadius, startRadius, onSelectTrial }: PanelP
           <rect x="0" y="0" width={WIDTH} height={HEIGHT} />
         </clipPath>
 
-        {/* Frame of reference: target distance arc, the straight line to the target, start and target. */}
-        <path d={targetArc()} fill="none" stroke={VIZ.grid} strokeWidth={1} />
+        {/* Frame of reference: the arrival arc, the straight line to the target, start and target. */}
+        <path d={arrivalArc(arrivalRadius)} fill="none" stroke={VIZ.grid} strokeWidth={1} />
         <line x1={START_X} y1={START_Y} x2={target.x} y2={target.y} stroke={VIZ.axis} strokeWidth={1} />
         <circle cx={target.x} cy={target.y} r={targetRadius * SCALE} fill={VIZ.surface} stroke={VIZ.muted} strokeWidth={1.5} />
         <circle cx={START_X} cy={START_Y} r={startRadius * SCALE} fill={VIZ.surface} stroke={VIZ.muted} strokeWidth={1.5} />
-        {/* Above the target, clear of where path ends land on the arc. */}
+        {/* Above the target, clear of where path ends land on the arc below it. */}
         <text x={target.x} y={target.y - targetRadius * SCALE - 7} fontSize={10} fill={VIZ.muted} textAnchor="middle">
           target
         </text>
@@ -183,10 +188,12 @@ interface PathPanelsProps {
   /** Target and start radii as fractions of the target distance, so they are drawn to scale. */
   targetRadius: number;
   startRadius: number;
+  /** Where outward paths end, as a fraction of the target distance. */
+  arrivalRadius: number;
   onSelectTrial: (trialNumber: number) => void;
 }
 
-export function PathPanels({ panels, kind, targetRadius, startRadius, onSelectTrial }: PathPanelsProps) {
+export function PathPanels({ panels, kind, targetRadius, startRadius, arrivalRadius, onSelectTrial }: PathPanelsProps) {
   const legend: LegendItem[] = [
     { key: 'line', color: VIZ.move, label: `Your ${kind === 'hand' ? 'hand (mouse)' : 'cursor'} path on the reaches named in the panel title` },
     { key: 'line', color: VIZ.catchTrial, label: 'Catch trial (rotation off)' },
@@ -203,6 +210,7 @@ export function PathPanels({ panels, kind, targetRadius, startRadius, onSelectTr
             kind={kind}
             targetRadius={targetRadius}
             startRadius={startRadius}
+            arrivalRadius={arrivalRadius}
             onSelectTrial={onSelectTrial}
           />
         ))}

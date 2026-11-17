@@ -86,7 +86,10 @@ export function Welcome({ quickDemo, onStart }: WelcomeProps) {
 
         <h2>What to expect</h2>
         <ul className="plain-list">
-          <li>A white dot replaces your normal pointer. You move it from a ring in the center out through targets.</li>
+          <li>
+            A white dot replaces your normal pointer. You move it from a ring in the center out to a target and hold
+            it there; it then jumps back to the center for the next one.
+          </li>
           <li>
             At times the dot may behave differently, or disappear while you move. That is part of the activity, not a
             malfunction. Just keep going.

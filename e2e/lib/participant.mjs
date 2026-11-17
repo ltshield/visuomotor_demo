@@ -57,6 +57,9 @@ export class Participant {
           visible: dot.style.visibility !== 'hidden',
         },
         targetAngle: lit ? Number(lit.getAttribute('data-angle')) : null,
+        // The lit target's two transient looks: the dot is being held in it / the reach just registered.
+        targetHolding: !!lit && lit.classList.contains('is-holding'),
+        targetConfirmed: !!lit && lit.classList.contains('is-confirmed'),
         overlay: !!task.querySelector('.task-overlay'),
         message: task.querySelector('.task-message')?.textContent ?? '',
       };
@@ -118,11 +121,47 @@ export class Participant {
 
   /**
    * Make one straight outward movement with the hand aimed along
-   * `handAngleDeg` (degrees counterclockwise from screen-right).
+   * `handAngleDeg` (degrees counterclockwise from screen-right), ending at the
+   * target's distance. This is the part of a reach that the metrics describe.
    */
-  async reach(handAngleDeg, { distance = this.targetDistance * 1.1, steps = 28 } = {}) {
+  async reach(handAngleDeg, { distance = this.targetDistance, steps = 28 } = {}) {
     const a = toRad(handAngleDeg);
     await this.moveBy(Math.cos(a) * distance, Math.sin(a) * distance, steps);
+  }
+
+  /**
+   * Finish the reach as a person would: if the dot is visible and not on the
+   * lit target, steer it there by looking at the screen and correcting; then
+   * hold still until the reach registers (or times out). With the dot hidden
+   * there is nothing to steer by, so this only holds still.
+   *
+   * The participant does not know how hand movement maps to dot movement. It
+   * moves the hand the way the dot needs to go, turned by `aimDeg` (its own
+   * current habit of aiming off to one side), and corrects whatever it then
+   * sees. That converges for any mapping rotated by less than 90°.
+   *
+   * @param {number} targetAngleDeg direction of the lit target
+   * @param {number} [aimDeg] how far the participant currently aims off the target
+   * @returns the observation once the reach phase is over
+   */
+  async settleOnTarget(targetAngleDeg, aimDeg = 0) {
+    const target = {
+      x: Math.cos(toRad(targetAngleDeg)) * this.targetDistance,
+      y: Math.sin(toRad(targetAngleDeg)) * this.targetDistance,
+    };
+    const turn = toRad(aimDeg);
+    for (let i = 0; i < 24; i++) {
+      const seen = await this.look();
+      if (!seen || seen.phase !== 'reach') return seen;
+      if (!seen.cursor.visible) break; // hidden dot: just hold
+      const ex = target.x - seen.cursor.x;
+      const ey = target.y - seen.cursor.y;
+      if (Math.hypot(ex, ey) <= 5) break; // comfortably inside the target
+      const dx = (ex * Math.cos(turn) - ey * Math.sin(turn)) * 0.85;
+      const dy = (ex * Math.sin(turn) + ey * Math.cos(turn)) * 0.85;
+      await this.moveBy(dx, dy, 5);
+    }
+    return this.waitFor((s) => s.phase !== 'reach', 'the reach to register', 15000);
   }
 
   /** Click the (captured) mouse button without moving. */
@@ -134,9 +173,10 @@ export class Participant {
 
 /**
  * A minimal error-driven learner. It keeps one number, `aim` (degrees added to
- * the target direction when reaching). After a reach with visible feedback it
- * looks at where the dot crossed relative to the target and shifts its aim
- * against that error; without feedback its aim slowly relaxes toward zero.
+ * the target direction when reaching). After the outward part of a reach with
+ * visible feedback it looks at where the dot ended up relative to the target
+ * and shifts its aim against that error; without feedback its aim slowly
+ * relaxes toward zero.
  * This is a test fixture for producing known, structured data — not a model of
  * human learning.
  */

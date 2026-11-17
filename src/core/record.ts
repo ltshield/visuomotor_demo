@@ -10,6 +10,15 @@
  * removed, or changes meaning (adding fields is a minor bump). The full field
  * reference is in docs/EXPORT_SCHEMA.md.
  *
+ *   2.0.0  Hold-to-complete and the jump home. `samples.reach` now runs to the
+ *          end of the hold (not just to the crossing); `crossing` is the
+ *          arrival at `crossing.radius` and gains `sampleIndex`; `valid` means
+ *          "the hand arrived", so a timed-out reach can be valid; new
+ *          `holdCompleted`, `times.holdCompletionMs`, `preset.timing.targetHoldMs`
+ *          and `reflection.consciousAdjustment`; `samples.postReach` is always
+ *          empty; `reflection.changedAim` is no longer asked (always null).
+ *   1.0.0  First release.
+ *
  * Key exports: `SessionRecord`, `TrialExport`, `buildSessionRecord`,
  * `finalAttempts`, `reachDataOf`, `SCHEMA_VERSION`.
  */
@@ -44,8 +53,8 @@ import type {
 } from './session';
 
 export const APP_NAME = 'visuomotor-learning-lab';
-export const APP_VERSION = '1.0.0';
-export const SCHEMA_VERSION = '1.0.0';
+export const APP_VERSION = '2.0.0';
+export const SCHEMA_VERSION = '2.0.0';
 
 /** Plain-language key to units and signs, embedded in every file so it can be read on its own. */
 export const CONVENTIONS = {
@@ -59,6 +68,10 @@ export const CONVENTIONS = {
     'u_x*r_y - u_y*r_x with u = unit vector to the target and r = position - start. Positive = counterclockwise (left) of the start-to-target line.',
   directionError:
     'atan2(lateral, progress) of the path relative to the target direction. Positive = counterclockwise. Full compensation for a +45 deg rotation is a hand direction error of -45 deg.',
+  arrival:
+    'Every reach metric is measured over the outward reach only: from the go cue to ARRIVAL, the first (interpolated) moment the hand reached crossing.radius from the start. With a target hold that radius is targetDistance - targetRadius (the near edge of the target). Samples from crossing.sampleIndex onward are settling on the target and holding; no metric uses them.',
+  registering:
+    'A reach registers (holdCompleted) when the target zone has been occupied continuously for preset.timing.targetHoldMs. Visible cursor: the cursor centre inside the target circle. Hidden cursor: the unseen hand at least crossing.radius from the start, in any direction.',
   sampleRounding: 'Numbers inside sample arrays are rounded to 3 decimal places in the JSON file.',
 } as const;
 
@@ -90,8 +103,14 @@ export interface TrialExport {
   feedback: FeedbackMode;
   cursorVisibleDuringReach: boolean;
 
+  /** 'completed' = the reach registered; 'timeout' = time ran out first; 'interrupted' = cut off and repeated. */
   outcome: ReachOutcome;
-  /** True when the reach completed and metrics could be computed. */
+  /** True when the target zone was held long enough for the reach to register. */
+  holdCompleted: boolean;
+  /**
+   * True when the hand arrived (reached the arrival radius) and metrics could
+   * be computed. This can be true for a 'timeout' whose hold never registered.
+   */
   valid: boolean;
   /** Why not, when `valid` is false. */
   invalidReason: string | null;
@@ -101,11 +120,15 @@ export interface TrialExport {
   crossing: CrossingPoint | null;
   metrics: TrialMetrics;
   samples: {
-    /** Return-to-centre and hold before the go cue (identity mapping; x,y is both hand and cursor). */
+    /** Movement at the centre before the go cue (identity mapping; x,y is both hand and cursor). */
     preReach: PathSamples;
-    /** The outward reach, from the go cue to the completing sample. */
+    /**
+     * The whole reach phase, from the go cue until the hold registered (or the
+     * time limit). Samples before `crossing.sampleIndex` are the outward reach;
+     * the rest are settling on the target and holding.
+     */
     reach: ReachSamples;
-    /** Hand movement during the post-reach pause, in the reach's hand coordinates. */
+    /** Always empty since schema 2 (the cursor jumps home; nothing follows a reach). Kept for compatibility. */
     postReach: PathSamples;
   };
 }
@@ -202,6 +225,7 @@ export function buildSessionRecord(
       feedback: spec.feedback,
       cursorVisibleDuringReach: r.cursorVisibleDuringReach,
       outcome: r.outcome,
+      holdCompleted: r.holdCompleted,
       valid: metrics.valid,
       invalidReason: metrics.nullReason,
       startAnchorOffset: { x: r.startAnchorOffset.x, y: r.startAnchorOffset.y },
