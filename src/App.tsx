@@ -22,6 +22,7 @@ import { buildSessionRecord, withReflection, type SessionRecord } from './core/r
 import { newSessionId, randomSeed, secureRandom } from './core/rng';
 import { createSessionPlan, type SessionPlan } from './core/session';
 import { getPointerInput } from './input/pointerLock';
+import { ClassView } from './ui/class/ClassView';
 import { Instructor } from './ui/Instructor';
 import { Reflection } from './ui/Reflection';
 import { ResultsPage } from './ui/results/ResultsPage';
@@ -80,8 +81,9 @@ export function App() {
     setScreen({ name: 'task', plan, skipPractice });
   };
 
-  // The instructor panel is never shown over a running task.
+  // Neither of the two non-student pages is ever shown over a running task.
   if (route.name === 'instructor' && screen.name !== 'task') return <Instructor />;
+  if (route.name === 'class' && screen.name !== 'task') return <ClassView code={route.code} />;
 
   switch (screen.name) {
     case 'welcome':

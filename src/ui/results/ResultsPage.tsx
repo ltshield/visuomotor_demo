@@ -10,6 +10,10 @@
  * contains) and shows ONLY this participant's data: no class averages, no
  * population curves, no significance claims.
  *
+ * Nothing leaves the browser from this page unless the participant uses the
+ * opt-in "Share your results with the class" section at the bottom, which
+ * sends a compact anonymous summary and nothing else (see ShareWithClass.tsx).
+ *
  * One control scopes every movement chart on the page: whether to show the
  * hand (mouse) path or the cursor as it was displayed.
  *
@@ -37,6 +41,7 @@ import {
   type PathKind,
 } from './model';
 import { PathPanels } from './PathPanels';
+import { ShareWithClass } from './ShareWithClass';
 import { SummaryTable, TrialTable } from './Tables';
 import { DirectionErrorChart, RotationTimeline } from './TrialCharts';
 import { TrialInspector } from './TrialInspector';
@@ -68,6 +73,8 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
   const [kind, setKind] = useState<PathKind>('hand');
   const [selectedTrial, setSelectedTrial] = useState(1);
   const [downloaded, setDownloaded] = useState(false);
+  /** The class code this session was shared with, once the participant has chosen to share. */
+  const [sharedWith, setSharedWith] = useState<string | null>(null);
   const inspectorRef = useRef<HTMLElement>(null);
 
   const bands = useMemo(() => phaseBands(session), [session]);
@@ -249,8 +256,11 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
       <h2>6. Keep your data</h2>
       <section className="card">
         <p>
-          Your results exist only in this browser tab and disappear when it is closed or reloaded. Nothing has been
-          sent anywhere. Download the files, or take screenshots, if you want to keep them.
+          Your results exist only in this browser tab and disappear when it is closed or reloaded.{' '}
+          {sharedWith === null
+            ? 'Nothing has been sent anywhere.'
+            : `The only thing that has left this browser is the anonymous summary you chose to share with class ${sharedWith}.`}{' '}
+          Download the files, or take screenshots, if you want to keep them.
         </p>
         <div className="button-row">
           <button type="button" className="button primary" onClick={() => save('json')}>
@@ -269,6 +279,9 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
           <code>{preset.id}</code>.
         </p>
       </section>
+
+      <h2>7. Share with your class (optional)</h2>
+      <ShareWithClass session={session} onShared={setSharedWith} />
 
       {otherVersionLabel && (
         <>

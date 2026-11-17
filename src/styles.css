@@ -1098,3 +1098,202 @@ legend,
 .link-row-controls .button {
   white-space: nowrap;
 }
+
+/* ---------- share with the class (results page) ---------- */
+
+.share h3 {
+  margin-bottom: 0.4em;
+}
+
+.share-form {
+  margin: 14px 0 6px;
+}
+
+.share-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  max-width: 460px;
+}
+
+.share-row input {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  text-transform: uppercase;
+  min-width: 0;
+}
+
+.share-row .button {
+  white-space: nowrap;
+}
+
+.share-success,
+.share-error {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  max-width: 70ch;
+}
+
+.share-success {
+  background: #eaf6ef;
+  border: 1px solid #9ccdb0;
+}
+
+.share-error {
+  color: var(--danger);
+  background: #fbefec;
+  border: 1px solid #e4b3a8;
+}
+
+.share-preview {
+  margin-top: 14px;
+}
+
+.share-preview summary {
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.share-preview > p {
+  margin-top: 8px;
+}
+
+.share-json {
+  max-height: 260px;
+  overflow: auto;
+  font-size: 0.78rem;
+  background: #f1f2f4;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0;
+}
+
+/* A button that reads as a link (e.g. "Refresh now"). */
+.link-button {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------- class view (projector) ---------- */
+
+.class-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-bottom: 10px;
+}
+
+.class-header h1 {
+  font-size: 2.2rem;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.class-eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.class-status {
+  text-align: right;
+}
+
+.class-status p {
+  margin: 0;
+}
+
+.class-join {
+  background: var(--accent-soft);
+  border: 1px solid #bcd6ee;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.class-view-select {
+  margin-bottom: 16px;
+}
+
+.class-view-select select {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  max-width: 100%;
+}
+
+.class-view-select p {
+  margin: 6px 0 0;
+}
+
+.class-empty {
+  text-align: center;
+  color: var(--muted);
+  margin: -8px 0 8px;
+}
+
+.class-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 32px;
+  margin: 0 0 16px;
+}
+
+.class-counts dt {
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.class-counts dd {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.class-key {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.class-stats td {
+  white-space: nowrap;
+}
+
+.class-footer {
+  margin-top: 8px;
+}
+
+@media (max-width: 600px) {
+  .class-status {
+    text-align: left;
+  }
+
+  .share-row {
+    flex-wrap: wrap;
+  }
+}

@@ -110,8 +110,9 @@ export function Welcome({ quickDemo, tier = quickDemo ? 'quick' : 'standard', on
         <h2>Your data</h2>
         <p>
           Your mouse movements are recorded <strong>only in this browser tab</strong>, so that you can look at them
-          afterwards. Nothing is uploaded or shared, and no name or account is needed. You can download your own data
-          at the end.
+          afterwards. Nothing is uploaded unless you choose to: at the end you may add an anonymous summary to your
+          class’s results if your instructor has asked for one. No name or account is needed, and you can download
+          your own data at the end.
         </p>
       </section>
 

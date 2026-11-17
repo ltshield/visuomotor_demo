@@ -1,0 +1,23 @@
+# Cloudflare Pages configuration: OPTIONAL template.
+#
+# You do not need this file. The simplest set-up (see DEPLOYMENT.md) attaches
+# the database in the Cloudflare dashboard:
+#   Workers & Pages > your project > Settings > Bindings > Add > D1 database,
+#   variable name DB, for both Production and Preview, then redeploy.
+#
+# Use this file only if you would rather keep the binding in the repository.
+# To do so, copy it to `wrangler.toml` and fill in the database id printed by
+#   npx wrangler d1 create visuomotor-class
+#
+# Be aware: once a `wrangler.toml` containing `pages_build_output_dir` is in the
+# repository, Cloudflare treats it as the source of truth for the project's
+# settings, and the matching fields in the dashboard become read-only.
+
+name = "visuomotor-demo"              # your Pages project name
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"                        # the name the code reads (env.DB); do not change
+database_name = "visuomotor-class"
+database_id = "PASTE-THE-DATABASE-ID-HERE"

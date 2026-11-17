@@ -2,6 +2,9 @@
  * Reflection.tsx — optional questions asked after the task and BEFORE the
  * reveal, so answers are not coloured by knowing what happened. Skippable.
  * Answers stay in the browser and are saved inside the session data file.
+ * One exception, by the participant's own later choice: if they share an
+ * anonymous summary with their class, the strategy answer goes with it. The
+ * free-text answer and the device answer are never sent anywhere.
  *
  * The strategy-awareness question replaces schema 1's "Did you deliberately
  * change how you aimed?": it asks the same thing with a graded answer.
@@ -47,7 +50,8 @@ export function Reflection({ onDone }: ReflectionProps) {
       <h1>All done. Before you see your results…</h1>
       <p className="lede">
         Three quick, optional questions. Answer from memory, before anything is explained. Your answers stay on this
-        device and are saved with your own data file.
+        device and are saved with your own data file. (If you later choose to share an anonymous summary with your
+        class, only your answer to the second question is included.)
       </p>
 
       <form className="card" onSubmit={submit}>

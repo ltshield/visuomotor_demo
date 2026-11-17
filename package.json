@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "preview:class": "npm run build && npx --yes wrangler@4 pages dev dist --d1 DB=classdb --compatibility-date=2026-11-01 --port 8788",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

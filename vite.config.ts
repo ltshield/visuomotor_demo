@@ -22,7 +22,7 @@ export default defineConfig({
     // Core logic is DOM-free, so tests default to the fast Node environment.
     // UI tests opt in to jsdom with a `// @vitest-environment jsdom` docblock.
     environment: 'node',
-    // `functions/` holds the Cloudflare Pages Functions (the class-data API) and their tests.
-    include: ['src/**/*.test.{ts,tsx}', 'functions/**/*.test.ts'],
+    // The class-data API (src/server) is tested here too; `functions/` holds only thin route files.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });

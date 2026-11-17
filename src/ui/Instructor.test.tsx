@@ -246,3 +246,39 @@ describe('reference details', () => {
     expect(text).toContain('first arrival at 222 units from the center');
   });
 });
+
+describe('class view set-up', () => {
+  const classField = () => screen.getByLabelText('Class code') as HTMLInputElement;
+
+  it('asks for a code and offers nothing to open until there is one', () => {
+    openPanel();
+    expect(classField().value).toBe('');
+    expect(screen.queryByTestId('open-class-view')).toBeNull();
+    expect(linkTitles()).not.toContain('Class view');
+  });
+
+  it('turns a typed code into the class view address, in capitals', () => {
+    openPanel();
+    fireEvent.change(classField(), { target: { value: 'neuro451' } });
+    expect(linkValue('Class view')).toBe(`${window.location.origin}/class/NEURO451`);
+    const open = screen.getByTestId('open-class-view') as HTMLAnchorElement;
+    expect(open.getAttribute('href')).toBe('/class/NEURO451');
+    expect(open.textContent).toContain('NEURO451');
+    expect(screen.queryByTestId('class-code-invalid')).toBeNull();
+  });
+
+  it('explains what a class code may contain when the typed one will not do', () => {
+    openPanel();
+    fireEvent.change(classField(), { target: { value: 'NEURO 451' } });
+    expect(screen.getByTestId('class-code-invalid').textContent).toContain('letters and digits only');
+    expect(screen.queryByTestId('open-class-view')).toBeNull();
+  });
+
+  it('says what students share, that it is opt-in, and that the code is not a password', () => {
+    openPanel();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Class sharing is opt-in');
+    expect(text).toContain('No name, no movement traces, no free-text answers');
+    expect(text).toContain('A class code is not a password');
+  });
+});

@@ -25,6 +25,9 @@
  *                                        copies the link the panel generates, and runs that.
  *   --channel chrome|msedge              installed browser to drive (default chrome)
  *   --url http://localhost:4173/         where the built app is served (default: starts `vite preview`)
+ *   --class NEURO451                     also share the session with this class code from the results page
+ *                                        and check it on the class view. Needs a server with the class API:
+ *                                          npx wrangler pages dev dist --d1 DB=classdb   (then --url http://127.0.0.1:8788/)
  *   --headed                             show the browser window (it will capture your real mouse while focused)
  *   --width 1366 --height 768            viewport size
  *   --out e2e/output                     where screenshots, downloads and the report go
@@ -496,6 +499,36 @@ try {
   // Summary table on the page agrees with the file.
   const summary = session.summary;
   check('page summary matches the downloaded summary', resultsText.includes(`${summary.trialsValid} of ${summary.trialsScheduled}`));
+
+  // ---- 6b. Share with the class (opt-in) ------------------------------------
+  console.log('\nClass sharing');
+  const shareField = page.getByLabel(/Class code/);
+  check('the share section is there, empty, and nothing has been sent', (await shareField.inputValue()) === '' && (await page.locator('main').innerText()).includes('Nothing has been sent anywhere.'));
+  const classCode = option('class', null);
+  if (classCode) {
+    // Needs a server with the class API, e.g. `npx wrangler pages dev dist --d1 DB=classdb`.
+    await shareField.fill(classCode.toLowerCase());
+    await page.getByRole('button', { name: 'Share anonymously' }).click();
+    const shared = await page.getByTestId('share-success').innerText({ timeout: 10000 }).catch(() => '');
+    check('sharing reports success in the agreed words', shared.includes('Your data has been added to the class view.'), shared);
+    check('the page now says what has left the browser', (await page.locator('main').innerText()).includes(`the anonymous summary you chose to share with class ${classCode.toUpperCase()}`));
+    await page.getByTestId('share-with-class').screenshot({ path: path.join(outDir, '09-shared.png') });
+
+    const classTab = await context.newPage();
+    await classTab.goto(`${server.url}class/${classCode}`);
+    await classTab.getByTestId('class-updated').filter({ hasText: /^Last updated/ }).waitFor({ timeout: 10000 });
+    const seriesKey = session.preset.id === 'rotation-sudden-45-v2' ? 'sudden' : session.preset.id === 'rotation-gradual-45-v2' ? 'gradual' : null;
+    check('the class view shows the code in capitals', (await classTab.getByTestId('class-code').innerText()) === classCode.toUpperCase());
+    check('the class view counts the shared session', Number(await classTab.getByTestId('class-total').innerText()) >= 1, await classTab.getByTestId('class-total').innerText());
+    if (seriesKey) {
+      check(`the session is drawn in the ${seriesKey} series`, Number(await classTab.getByTestId(`class-count-${seriesKey}`).innerText()) >= 1);
+    } else {
+      check('a non-standard protocol gets its own view', (await classTab.locator('#class-view-select option').allInnerTexts()).some((t) => t.startsWith(session.preset.id)));
+    }
+    check('the class chart is drawn', (await classTab.locator('.class-view .recharts-surface').count()) >= 1);
+    await classTab.screenshot({ path: path.join(outDir, '09b-class-view.png'), fullPage: true });
+    await classTab.close();
+  }
 
   // ---- 7. Instructor panel --------------------------------------------------
   console.log('\nInstructor panel');

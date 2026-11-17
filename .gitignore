@@ -6,4 +6,6 @@ Thumbs.db
 .vite/
 coverage/
 e2e/output/
+# Local Cloudflare dev server state (wrangler pages dev)
+.wrangler/
 *.log

@@ -19,6 +19,7 @@
 
 import { useState } from 'react';
 import { buildParticipantLink } from '../core/assignment';
+import { CLASS_CODE_MAX, MAX_SESSIONS_PER_CLASS, normalizeClassCode } from '../core/classWire';
 import {
   AFTEREFFECT_OPTIONS,
   ANGLE_OPTIONS,
@@ -46,6 +47,7 @@ import {
   type PresetConfig,
 } from '../core/presets';
 import { catchTrialNumbers, describePerturbation, formatDeg, perturbedAngles } from './presetText';
+import { classPath } from './route';
 
 /** The warning shown whenever the settings no longer describe a shipped preset. */
 export const CUSTOM_WARNING = 'Custom sessions will not be pooled with canonical preset data in class comparisons.';
@@ -277,10 +279,86 @@ function LinksPanel({ settings, base }: { settings: InstructorSettings; base: st
           give half the class each direct link.
         </li>
         <li>
-          Results exist only in the student’s browser tab. Ask students to download their data or take screenshots
-          before closing the tab.
+          Full results exist only in the student’s browser tab. Ask students to download their data or take
+          screenshots before closing the tab. (The class view below keeps only an anonymous summary.)
         </li>
         <li>Students need a desktop or laptop with a physical mouse and a recent Chrome or Edge.</li>
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * Class view set-up: the professor picks any code, tells the class, and opens
+ * the class page on the projector. There is nothing to register: a code comes
+ * into existence when the first student shares with it.
+ */
+function ClassPanel({ origin }: { origin: string }) {
+  const [typed, setTyped] = useState('');
+  const code = normalizeClassCode(typed);
+  const url = code ? `${origin}${classPath(code)}` : '';
+
+  return (
+    <section className="card">
+      <h2>See the whole class on the projector</h2>
+      <p>
+        Students can add an anonymous summary of their results to a class view, which you open on the projector. Their
+        curves appear as they share.
+      </p>
+      <ol className="plain-list">
+        <li>
+          <strong>Choose a class code.</strong> Any letters and digits, up to {CLASS_CODE_MAX}, such as NEURO451. Use
+          a new code for each class or section; there is nothing to register.
+        </li>
+        <li>
+          <strong>Open the class view</strong> below and put it on the projector.
+        </li>
+        <li>
+          <strong>Tell students the code.</strong> When they reach their results they scroll to “Share your results
+          with the class”, type the code and press Share anonymously. Sharing is optional and is never automatic.
+        </li>
+      </ol>
+      <div className="setting">
+        <label className="field-label" htmlFor="class-code-setup">
+          Class code
+        </label>
+        <input
+          id="class-code-setup"
+          type="text"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          maxLength={CLASS_CODE_MAX + 4}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="for example NEURO451"
+          style={{ maxWidth: 280 }}
+        />
+        {typed.trim() !== '' && code === null && (
+          <p className="share-error" role="alert" data-testid="class-code-invalid">
+            A class code is letters and digits only, up to {CLASS_CODE_MAX} characters, with no spaces or symbols.
+          </p>
+        )}
+      </div>
+      {code && (
+        <>
+          <CopyableLink title="Class view" detail={`Shows every session shared with the code ${code}. It refreshes itself every 15 seconds.`} url={url} />
+          <p style={{ marginTop: 12 }}>
+            <a className="button primary" href={classPath(code)} target="_blank" rel="noopener noreferrer" data-testid="open-class-view">
+              Open the class view for {code}
+            </a>
+          </p>
+        </>
+      )}
+      <ul className="plain-list small" style={{ marginTop: 14 }}>
+        <li>
+          Only the two standard versions are drawn together. Sessions from a custom protocol or the Quick Demo appear
+          in a separate view and are never averaged in.
+        </li>
+        <li>
+          A class code is not a password: anyone who knows it can share to it or open its view. The data is anonymous
+          and holds nothing sensitive, but do not treat the code as private. A code holds up to{' '}
+          {MAX_SESSIONS_PER_CLASS} sessions.
+        </li>
       </ul>
     </section>
   );
@@ -351,7 +429,8 @@ function PresetDefinition({ preset }: { preset: PresetConfig }) {
 export function Instructor() {
   const [revealed, setRevealed] = useState(false);
   const [settings, setSettings] = useState<InstructorSettings>({ ...DEFAULT_SETTINGS });
-  const base = `${window.location.origin}/`;
+  const origin = window.location.origin;
+  const base = `${origin}/`;
   const g = SUDDEN_45_V2.geometry;
   const t = SUDDEN_45_V2.timing;
   const holdMs = targetHoldMsOf(t);
@@ -395,6 +474,7 @@ export function Instructor() {
 
       <SettingsPanel settings={settings} onChange={setSettings} />
       <LinksPanel settings={settings} base={base} />
+      <ClassPanel origin={origin} />
 
       <details className="reference">
         <summary>Protocol definitions and reference details</summary>
@@ -476,12 +556,33 @@ export function Instructor() {
         <section className="card">
           <h2>Data and privacy</h2>
           <ul className="plain-list">
-            <li>Nothing is uploaded. There are no accounts, and no names or identifiers are requested.</li>
+            <li>
+              Nothing is uploaded automatically. There are no accounts, and no names or identifiers are requested.
+            </li>
             <li>
               Each student can download a complete session file (JSON), a one-row-per-reach table (CSV) and a
-              one-row-per-mouse-sample table (CSV).
+              one-row-per-mouse-sample table (CSV). Those files, with the movement traces, never leave the student’s
+              computer unless the student hands them in.
             </li>
-            <li>The results page shows only that student’s own data. It never shows class or population averages.</li>
+            <li>
+              <strong>Class sharing is opt-in.</strong> A student who types a class code and presses Share
+              anonymously sends a compact summary: for each reach its block, catch flag, the rotation applied and one
+              number (the initial direction error), plus which version they did and their answer to the question about
+              adjusting their aim. No name, no movement traces, no free-text answers and no browser or device details
+              are sent, and the class view cannot show which line belongs to whom.
+            </li>
+            <li>
+              The summaries are stored in a small database attached to this site. Delete a class’s data when you no
+              longer need it; the deployment guide gives the one-line command.
+            </li>
+            <li>
+              The student’s own results page shows only that student’s data. Class data appears only on the class
+              view.
+            </li>
+            <li>
+              This is set up for classroom teaching. If you intend to use the data for research or publication, check
+              what your institution requires first.
+            </li>
           </ul>
         </section>
 
