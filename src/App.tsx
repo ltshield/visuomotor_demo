@@ -1,9 +1,11 @@
 /**
  * App.tsx — top-level flow: Welcome → Practice/Experiment → Reflection → Results,
- * plus the small instructor page at `#/instructors`.
+ * plus two pages that are not part of the student flow: the instructor panel
+ * (`/instructor`) and the class view (`/class/<CODE>`). See ui/route.ts.
  *
- * The app keeps everything in memory for the life of the tab: there is no
- * account, no server and no storage between visits.
+ * The app keeps a session in memory for the life of the tab: there is no
+ * account and no storage between visits. Nothing leaves the browser unless a
+ * student chooses, on the results page, to share an anonymous summary.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -14,6 +16,7 @@ import {
   readSeedOverride,
   type Assignment,
 } from './core/assignment';
+import { decodeSettings, readCustomCode, type TrialTier } from './core/custom';
 import { QUICK_DEMO_45_V2, otherCanonicalPreset } from './core/presets';
 import { buildSessionRecord, withReflection, type SessionRecord } from './core/record';
 import { newSessionId, randomSeed, secureRandom } from './core/rng';
@@ -22,6 +25,7 @@ import { getPointerInput } from './input/pointerLock';
 import { Instructor } from './ui/Instructor';
 import { Reflection } from './ui/Reflection';
 import { ResultsPage } from './ui/results/ResultsPage';
+import { useRoute } from './ui/route';
 import { getSoundCues } from './ui/sound';
 import { TaskScreen } from './ui/TaskScreen';
 import { Welcome } from './ui/Welcome';
@@ -32,26 +36,30 @@ type Screen =
   | { name: 'reflection'; session: SessionRecord }
   | { name: 'results'; session: SessionRecord };
 
-/** True while the address ends in `#/instructors`. */
-function useInstructorRoute(): boolean {
-  const read = () => window.location.hash.replace(/^#\/?/, '') === 'instructors';
-  const [active, setActive] = useState(read);
-  useEffect(() => {
-    const onChange = () => setActive(read());
-    window.addEventListener('hashchange', onChange);
-    return () => window.removeEventListener('hashchange', onChange);
-  }, []);
-  return active;
+/**
+ * How long the link's session is, so the start page can give an honest time
+ * estimate. This is the one thing about a link the start page reflects; it
+ * says nothing about what the session contains.
+ */
+function tierOfLink(linkCode: string | null, customCode: string | null): TrialTier {
+  const custom = customCode !== null ? decodeSettings(customCode) : null;
+  if (custom) return custom.tier;
+  return linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V2.id ? 'quick' : 'standard';
 }
 
 export function App() {
-  const instructorRoute = useInstructorRoute();
+  const route = useRoute();
   const [screen, setScreen] = useState<Screen>({ name: 'welcome' });
   /** Presets completed since the page was opened (used to flag possible carry-over). */
   const [completedPresetIds, setCompletedPresetIds] = useState<string[]>([]);
 
   const linkCode = readLinkCode(window.location.search);
-  const quickDemo = linkCode !== null && LINK_CODES[linkCode] === QUICK_DEMO_45_V2.id;
+  const customCode = readCustomCode(window.location.search);
+  // The demo badge belongs to the shipped Quick Demo link only; a valid custom link takes precedence over `c`.
+  const quickDemo =
+    linkCode !== null &&
+    LINK_CODES[linkCode] === QUICK_DEMO_45_V2.id &&
+    (customCode === null || decodeSettings(customCode) === null);
 
   // Each screen starts at the top of the page.
   useEffect(() => {
@@ -72,12 +80,17 @@ export function App() {
     setScreen({ name: 'task', plan, skipPractice });
   };
 
-  if (instructorRoute && screen.name !== 'task') return <Instructor />;
+  // The instructor panel is never shown over a running task.
+  if (route.name === 'instructor' && screen.name !== 'task') return <Instructor />;
 
   switch (screen.name) {
     case 'welcome':
       return (
-        <Welcome quickDemo={quickDemo} onStart={() => startSession(assignPreset(linkCode, secureRandom), false)} />
+        <Welcome
+          quickDemo={quickDemo}
+          tier={tierOfLink(linkCode, customCode)}
+          onStart={() => startSession(assignPreset(linkCode, secureRandom, customCode), false)}
+        />
       );
 
     case 'task':

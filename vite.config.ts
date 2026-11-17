@@ -1,14 +1,16 @@
 /**
  * Vite + Vitest configuration.
  *
- * `base: './'` makes the production build location-independent, so the same
- * `dist/` folder works at a domain root (Cloudflare Pages) or under a sub-path.
+ * `base: '/'`: the site is served from the root of its domain. That is what
+ * lets `/instructor` and `/class/<CODE>` be real addresses: on such a path a
+ * relative asset URL would resolve under `/class/` and fail to load. (To host
+ * under a sub-folder instead, set `base` to that folder, e.g. '/lab/'.)
  */
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  base: './',
+  base: '/',
   plugins: [react()],
   build: {
     // One bundle on purpose: once the page has loaded, the whole activity
@@ -20,6 +22,7 @@ export default defineConfig({
     // Core logic is DOM-free, so tests default to the fast Node environment.
     // UI tests opt in to jsdom with a `// @vitest-environment jsdom` docblock.
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
+    // `functions/` holds the Cloudflare Pages Functions (the class-data API) and their tests.
+    include: ['src/**/*.test.{ts,tsx}', 'functions/**/*.test.ts'],
   },
 });

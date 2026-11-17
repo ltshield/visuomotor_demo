@@ -9,7 +9,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionRecord } from '../../core/record';
 import type { TrialSpec } from '../../core/schedule';
-import { scriptedSessionRecord } from '../../core/testUtils';
+import { assignPreset } from '../../core/assignment';
+import { encodeSettings, type InstructorSettings } from '../../core/custom';
+import { buildSessionRecord } from '../../core/record';
+import { createSessionPlan } from '../../core/session';
+import { runScriptedSession, scriptedSessionRecord, taskResultFrom } from '../../core/testUtils';
 import { catchInterpretation } from './CatchCallout';
 import { METRIC_INFO } from './InfoNote';
 import { catchCallout } from './model';
@@ -22,6 +26,19 @@ const aim = (t: TrialSpec) => (t.phase === 'baseline' ? 3 : t.phase === 'adaptat
 const sudden = scriptedSessionRecord('k7m2', aim);
 const gradual = scriptedSessionRecord('p4x9', aim);
 const demo = scriptedSessionRecord('demo', aim);
+
+/** A complete scripted session run through a custom link built from instructor settings. */
+function customSession(settings: InstructorSettings): SessionRecord {
+  const plan = createSessionPlan({
+    assignment: assignPreset(null, () => 0, encodeSettings(settings)),
+    seed: 77,
+    sessionId: 'custom-session',
+    previousPresetIds: [],
+    now: new Date('2026-11-14T15:30:00.000Z'),
+  });
+  const { engine, driver } = runScriptedSession(plan.preset, plan.schedule, aim);
+  return buildSessionRecord(plan, taskResultFrom(engine, 1000, driver.t), null);
+}
 
 function renderResults(session: SessionRecord, onTryOther = vi.fn()) {
   const other =
@@ -256,6 +273,63 @@ describe('strategy-awareness answer', () => {
       expect(box.textContent).toContain('both can produce aftereffects');
       unmount();
     }
+  });
+});
+
+describe('custom protocols', () => {
+  const custom = customSession({ schedule: 'sudden', angleDeg: 30, tier: 'standard', aftereffect: 'hidden', catchTrials: true });
+  const bare = customSession({ schedule: 'gradual', angleDeg: 60, tier: 'quick', aftereffect: 'visible', catchTrials: false });
+
+  it('are labelled as custom on the results page, with their own id', () => {
+    const { text } = renderResults(custom);
+    expect(screen.getByTestId('custom-badge').textContent).toBe(
+      'Custom protocol: set up by your instructor, not comparable with the standard versions',
+    );
+    expect(screen.getByTestId('revealed-condition').textContent).toBe('Custom: sudden 30° rotation');
+    expect(text()).toContain('rotated +30° (counterclockwise) all at once');
+    expect(text()).toContain('It was set by the link you opened, which your instructor set up.');
+    expect(text()).toContain('Custom protocol: rotation-sudden-30-custom-v2');
+    expect(text()).toContain('This was a custom protocol set up by your instructor (rotation-sudden-30-custom-v2)');
+    expect(text()).toContain('should not be compared or pooled with theirs');
+  });
+
+  it('are not offered “the other version” and are not called a Quick Demo', () => {
+    const { text } = renderResults(custom);
+    expect(screen.queryByRole('button', { name: 'Try the other version' })).toBeNull();
+    expect(text()).not.toContain('Quick Demo');
+    expect(text()).not.toContain('other people did the');
+  });
+
+  it('standard sessions carry no custom label', () => {
+    renderResults(sudden);
+    expect(screen.queryByTestId('custom-badge')).toBeNull();
+  });
+
+  it('scale the callout to the chosen angle', () => {
+    renderResults(custom);
+    // Scripted aim on the catch trial is −35° against a baseline of +3°: more than the 30° rotation.
+    expect(screen.getByTestId('catch-callout').textContent).toContain('most or all of the 30° it takes to cancel the rotation');
+  });
+
+  it('with catch trials off: no callout, no catch panels, no catch explanations', () => {
+    const { text } = renderResults(bare);
+    expect(screen.queryByTestId('catch-callout')).toBeNull();
+    const titles = [...document.querySelectorAll('.path-panel figcaption strong')].map((el) => el.textContent);
+    expect(titles).toEqual(['Baseline', 'First rotated reaches', 'Last rotated reaches', 'First aftereffect reach']);
+    expect(screen.queryAllByRole('button', { name: 'Catch trial error' })).toHaveLength(0);
+    expect(text()).not.toContain('Catch trials up close');
+    expect(text()).not.toMatch(/Catch trials? \(trial/);
+    expect(document.querySelector('.viz-legend')?.textContent).not.toBeNull();
+  });
+
+  it('with a visible-cursor aftereffect block: says so, and explains what that does', () => {
+    const { text } = renderResults(bare);
+    expect(text()).toContain('this time the cursor stayed visible while you reached');
+    expect(text()).toContain('those reaches were themselves washing the change out');
+    expect(text()).not.toContain('the cursor hidden again');
+    // The chart's block label reports the cursor as visible in the aftereffect block.
+    expect(text()).toContain('Baseline (trials 1–4).');
+    expect(text()).toContain('Aftereffect block (trials 13–16).');
   });
 });
 

@@ -6,13 +6,17 @@
  * - An instructor can hand out a direct link to one preset. The link carries
  *   an OPAQUE code (`?c=k7m2`), never the word "sudden" or "gradual", so the
  *   address bar does not give the condition away.
+ * - An instructor can also hand out a link to a custom protocol built on the
+ *   instructor page (`?x=a0hm`, see core/custom.ts). It is just as opaque.
  * - After the debrief a participant may choose to try the other condition;
  *   that run is recorded as not concealed.
  *
  * Key exports: `Assignment`, `assignPreset`, `assignOtherCondition`,
- * `LINK_CODES`, `readLinkCode`, `readSeedOverride`, `buildParticipantLink`.
+ * `LINK_CODES`, `readLinkCode`, `readSeedOverride`, `buildParticipantLink`,
+ * `presetForAssignment`.
  */
 
+import { decodeSettings, resolvePreset, type InstructorSettings } from './custom';
 import {
   CANONICAL_PRESETS,
   GRADUAL_45_V2,
@@ -26,8 +30,10 @@ import {
 export type AssignmentMethod =
   /** Ordinary visitor: fair coin flip between the two canonical presets. */
   | 'random-50-50'
-  /** The page was opened through an instructor link naming one preset. */
+  /** The page was opened through an instructor link naming one shipped preset. */
   | 'direct-link'
+  /** The page was opened through an instructor link carrying custom settings. */
+  | 'custom-link'
   /** The participant asked for the other condition after seeing a debrief. */
   | 'participant-chose-other-condition';
 
@@ -40,6 +46,12 @@ export interface Assignment {
   ignoredLinkCode: string | null;
   /** False only when the participant already knew which condition they were starting. */
   conditionConcealed: boolean;
+  /**
+   * The instructor settings carried by a custom link, when that is how the
+   * preset was chosen; null otherwise. Custom presets are built from these on
+   * demand rather than looked up, because there is one for every combination.
+   */
+  customSettings: InstructorSettings | null;
 }
 
 /** Name of the URL query parameter that carries a link code. */
@@ -84,13 +96,45 @@ export function readSeedOverride(search: string): number | null {
 
 /**
  * Decide the preset for a new session.
- * @param linkCode code from the URL, or null
- * @param random   source of uniform numbers in [0, 1); injected so tests can control the coin
+ *
+ * Precedence: a valid custom-settings code, then a known link code, then the
+ * coin. A code that is present but not understood is recorded in
+ * `ignoredLinkCode` and the visitor is assigned at random, exactly like an
+ * ordinary visitor; a typo in a link never produces an error page.
+ *
+ * @param linkCode   `c` code from the URL, or null
+ * @param random     source of uniform numbers in [0, 1); injected so tests can control the coin
+ * @param customCode `x` code from the URL (custom instructor settings), or null
  */
-export function assignPreset(linkCode: string | null, random: () => number): Assignment {
+export function assignPreset(linkCode: string | null, random: () => number, customCode: string | null = null): Assignment {
+  if (customCode !== null) {
+    const settings = decodeSettings(customCode);
+    if (settings !== null) {
+      // Settings that happen to describe a shipped preset resolve to that
+      // preset and its canonical id, so its data pools where it belongs.
+      const preset = resolvePreset(settings);
+      const custom = preset.kind === 'custom';
+      return {
+        presetId: preset.id,
+        method: custom ? 'custom-link' : 'direct-link',
+        linkCode: customCode,
+        ignoredLinkCode: null,
+        conditionConcealed: true,
+        customSettings: custom ? settings : null,
+      };
+    }
+  }
+
   const presetId = linkCode !== null ? LINK_CODES[linkCode] : undefined;
   if (linkCode !== null && presetId !== undefined) {
-    return { presetId, method: 'direct-link', linkCode, ignoredLinkCode: null, conditionConcealed: true };
+    return {
+      presetId,
+      method: 'direct-link',
+      linkCode,
+      ignoredLinkCode: customCode,
+      conditionConcealed: true,
+      customSettings: null,
+    };
   }
   // Fair coin: values below 0.5 → first canonical preset, otherwise the second.
   const preset = random() < 0.5 ? CANONICAL_PRESETS[0] : CANONICAL_PRESETS[1];
@@ -98,8 +142,9 @@ export function assignPreset(linkCode: string | null, random: () => number): Ass
     presetId: preset.id,
     method: 'random-50-50',
     linkCode: null,
-    ignoredLinkCode: linkCode,
+    ignoredLinkCode: customCode ?? linkCode,
     conditionConcealed: true,
+    customSettings: null,
   };
 }
 
@@ -113,10 +158,19 @@ export function assignOtherCondition(completedPresetId: string): Assignment | nu
     linkCode: null,
     ignoredLinkCode: null,
     conditionConcealed: false,
+    customSettings: null,
   };
 }
 
 export function presetForAssignment(assignment: Assignment): PresetConfig {
+  if (assignment.customSettings) {
+    const preset = resolvePreset(assignment.customSettings);
+    // The id recorded in the assignment and the preset actually run must agree.
+    if (preset.id !== assignment.presetId) {
+      throw new Error(`Custom settings resolve to ${preset.id}, not ${assignment.presetId}`);
+    }
+    return preset;
+  }
   const preset = getPresetById(assignment.presetId);
   if (!preset) throw new Error(`Unknown preset id: ${assignment.presetId}`);
   return preset;
@@ -124,8 +178,9 @@ export function presetForAssignment(assignment: Assignment): PresetConfig {
 
 /**
  * A link to give to participants. `presetId` null gives the general link
- * (random assignment); otherwise the direct link for that preset.
- * `baseUrl` is the page address without query or hash.
+ * (random assignment); otherwise the direct link for that shipped preset.
+ * `baseUrl` is the page address without query or hash. For a custom protocol
+ * use `buildCustomLink` in core/custom.ts.
  */
 export function buildParticipantLink(baseUrl: string, presetId: string | null): string {
   if (presetId === null) return baseUrl;

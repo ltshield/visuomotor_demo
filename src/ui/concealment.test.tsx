@@ -50,6 +50,27 @@ describe('Welcome screen', () => {
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
+  it('gives a time estimate that fits the length of the session, and nothing else about it', () => {
+    for (const [tier, minutes] of [
+      ['quick', '3 to 5'],
+      ['standard', '5 to 10'],
+      ['extended', '8 to 12'],
+    ] as const) {
+      const { container } = render(<Welcome quickDemo={false} tier={tier} onStart={() => {}} />);
+      expect(container.textContent).toContain(`It takes about ${minutes} minutes in total.`);
+      expect(container.textContent).not.toMatch(REVEALING);
+      // A custom link is not announced as anything special before the debrief.
+      expect(screen.queryByTestId('quick-demo-badge')).toBeNull();
+      expect(container.textContent).not.toMatch(/custom/i);
+      cleanup();
+    }
+  });
+
+  it('describes reaching to a target, holding, and the jump back', () => {
+    const { container } = render(<Welcome quickDemo={false} onStart={() => {}} />);
+    expect(container.textContent).toMatch(/out to a target and hold\s+it there; it then jumps back to the center/);
+  });
+
   it('labels the Quick Demo clearly without revealing its content', () => {
     const { container } = render(<Welcome quickDemo onStart={() => {}} />);
     expect(screen.getByTestId('quick-demo-badge').textContent).toMatch(/Quick Demo/);
@@ -77,7 +98,7 @@ describe('Welcome screen', () => {
 
   it('offers an unobtrusive link to the instructor page', () => {
     render(<Welcome quickDemo={false} onStart={() => {}} />);
-    expect(screen.getByRole('link', { name: 'For instructors' }).getAttribute('href')).toBe('#/instructors');
+    expect(screen.getByRole('link', { name: 'For instructors' }).getAttribute('href')).toBe('/instructor');
   });
 });
 
@@ -215,10 +236,11 @@ describe('Reflection screen', () => {
 });
 
 describe('Instructor page', () => {
+  // The panel itself is covered in Instructor.test.tsx; here, only that it hides the design.
   it('keeps the design behind a confirmation', () => {
     const { container } = render(<Instructor />);
     expect(container.textContent).not.toMatch(/\b45\b|k7m2|p4x9|rotation-sudden/);
-    expect(screen.getByRole('link', { name: 'Back to the activity' }).getAttribute('href')).toBe('#/');
+    expect(screen.getByRole('link', { name: 'Back to the activity' }).getAttribute('href')).toBe('/');
   });
 
   it('after confirmation shows the preset definitions and copyable links', () => {
@@ -231,11 +253,10 @@ describe('Instructor page', () => {
     expect(text).toMatch(/6\.43°/); // the gradual ramp step is spelled out
 
     const value = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
-    const base = `${window.location.origin}${window.location.pathname}`;
-    expect(value('General link address')).toBe(base);
-    expect(value('Direct link: Sudden version address')).toBe(`${base}?c=k7m2`);
-    expect(value('Direct link: Gradual version address')).toBe(`${base}?c=p4x9`);
-    expect(value('Quick Demo (optional) address')).toBe(`${base}?c=demo`);
-    expect(screen.getAllByRole('button', { name: 'Copy' })).toHaveLength(4);
+    const base = `${window.location.origin}/`;
+    expect(value('Random assignment link address')).toBe(base);
+    expect(value('Sudden 45° link address')).toBe(`${base}?c=k7m2`);
+    expect(value('Gradual 0°→45° link address')).toBe(`${base}?c=p4x9`);
+    expect(screen.getAllByRole('button', { name: 'Copy' })).toHaveLength(3);
   });
 });

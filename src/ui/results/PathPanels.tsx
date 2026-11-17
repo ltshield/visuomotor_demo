@@ -196,9 +196,12 @@ interface PathPanelsProps {
 export function PathPanels({ panels, kind, targetRadius, startRadius, arrivalRadius, onSelectTrial }: PathPanelsProps) {
   const legend: LegendItem[] = [
     { key: 'line', color: VIZ.move, label: `Your ${kind === 'hand' ? 'hand (mouse)' : 'cursor'} path on the reaches named in the panel title` },
-    { key: 'line', color: VIZ.catchTrial, label: 'Catch trial (rotation off)' },
-    { key: 'line', color: VIZ.context, label: 'Other reaches, for comparison' },
   ];
+  // A protocol with catch trials switched off has no catch panel to explain.
+  if (panels.some((p) => p.key.startsWith('catch-'))) {
+    legend.push({ key: 'line', color: VIZ.catchTrial, label: 'Catch trial (rotation off)' });
+  }
+  legend.push({ key: 'line', color: VIZ.context, label: 'Other reaches, for comparison' });
   return (
     <>
       <LegendRow items={legend} />

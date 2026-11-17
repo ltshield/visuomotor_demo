@@ -44,6 +44,7 @@ import { TrialInspector } from './TrialInspector';
 const ASSIGNMENT_TEXT: Record<SessionRecord['assignment']['method'], string> = {
   'random-50-50': 'It was chosen at random (a 50/50 coin flip) when you pressed Start.',
   'direct-link': 'It was set by the link you opened.',
+  'custom-link': 'It was set by the link you opened, which your instructor set up.',
   'participant-chose-other-condition': 'You chose it after seeing the results of an earlier run.',
 };
 
@@ -111,6 +112,11 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
     <main className="page wide results">
       <h1>Your results</h1>
       {preset.kind === 'demo' && <p className="badge">Quick Demo: a shortened version, not comparable with the standard activity</p>}
+      {preset.kind === 'custom' && (
+        <p className="badge" data-testid="custom-badge">
+          Custom protocol: set up by your instructor, not comparable with the standard versions
+        </p>
+      )}
 
       <section className="card reveal" data-testid="reveal">
         <p className="lede">
@@ -259,7 +265,8 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
         </div>
         <p className="viz-footnote">
           The JSON file contains everything: the exact protocol and seed, every mouse sample, and all the values on
-          this page. The CSV files open in a spreadsheet. Preset: <code>{preset.id}</code>.
+          this page. The CSV files open in a spreadsheet. {preset.kind === 'custom' ? 'Custom protocol' : 'Preset'}:{' '}
+          <code>{preset.id}</code>.
         </p>
       </section>
 

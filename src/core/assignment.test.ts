@@ -28,6 +28,7 @@ describe('random 50/50 assignment', () => {
       linkCode: null,
       ignoredLinkCode: null,
       conditionConcealed: true,
+      customSettings: null,
     });
   });
 
@@ -65,6 +66,7 @@ describe('direct instructor links', () => {
       linkCode: 'p4x9',
       ignoredLinkCode: null,
       conditionConcealed: true,
+      customSettings: null,
     });
   });
 
@@ -143,6 +145,7 @@ describe('trying the other condition after the debrief', () => {
       linkCode: null,
       ignoredLinkCode: null,
       conditionConcealed: false,
+      customSettings: null,
     });
     expect(assignOtherCondition(GRADUAL_45_V2.id)!.presetId).toBe(SUDDEN_45_V2.id);
   });

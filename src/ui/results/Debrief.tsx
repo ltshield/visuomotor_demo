@@ -29,6 +29,8 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
   const repeatRun = session.runNumber > 1;
   const otherKind = preset.perturbation.kind === 'sudden' ? 'gradual' : 'sudden';
   // The strategy-awareness answer given before the reveal, in the words of the option chosen.
+  const baselineHidden = preset.structure.baseline.feedback === 'hidden';
+  const aftereffectHidden = preset.structure.aftereffect.feedback === 'hidden';
   const adjustment = session.reflection?.consciousAdjustment ?? null;
   const adjustmentLabel = ADJUSTMENT_CHOICES.find((c) => c.value === adjustment)?.label ?? null;
 
@@ -58,9 +60,14 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
           </li>
         )}
         <li>
-          <strong>Aftereffect block ({span(band('aftereffect'))}).</strong> The rotation was removed for good and the
-          cursor hidden again, exactly as in the baseline and again without announcement. Reaches that still veer
-          clockwise here are <strong>aftereffects</strong>: a learned change persisting after its cause has gone.
+          <strong>Aftereffect block ({span(band('aftereffect'))}).</strong>{' '}
+          {aftereffectHidden
+            ? `The rotation was removed for good and the cursor hidden again${baselineHidden ? ', exactly as in the baseline' : ''} and again without announcement.`
+            : 'The rotation was removed for good, without announcement, and this time the cursor stayed visible while you reached.'}{' '}
+          Reaches that still veer clockwise here are <strong>aftereffects</strong>: a learned change persisting after
+          its cause has gone.
+          {!aftereffectHidden &&
+            ' Because you could see the cursor, you could also correct it on the way, so look at the initial direction of these reaches rather than where they ended.'}
         </li>
       </ol>
 
@@ -71,8 +78,9 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
           from 0° toward the gray reference line (−45° while the rotation was at full size).
         </li>
         <li>
-          <strong>An aftereffect</strong> would appear as catch-trial and aftereffect-block points lying clockwise of
-          your baseline points, even though the rotation was 0° on those reaches. Compare them with your own baseline
+          <strong>An aftereffect</strong> would appear as {catches.length > 0 ? 'catch-trial and ' : ''}
+          aftereffect-block points lying clockwise of your baseline points, even though the rotation was 0° on those
+          reaches. Compare them with your own baseline
           rather than with 0°, because most people have a small bias of their own.
         </li>
         <li>
@@ -101,10 +109,10 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
         </li>
         <li>
           <strong>Washout.</strong> Washout is the gradual return toward baseline once normal feedback is restored.
-          There was no separate washout block here. In the last block the cursor stayed hidden for each whole reach and
-          then simply reappeared at the center, so you were never shown where those reaches ended. An aftereffect can
-          still fade over repeated reaches, and reaches made with the cursor fully visible would wash it out much
-          faster.
+          There was no separate washout block here.{' '}
+          {aftereffectHidden
+            ? 'In the last block the cursor stayed hidden for each whole reach and then simply reappeared at the center, so you were never shown where those reaches ended. An aftereffect can still fade over repeated reaches, and reaches made with the cursor fully visible would wash it out much faster.'
+            : 'In the last block, though, you could see the cursor on every reach. That restored normal feedback at once, so those reaches were themselves washing the change out: expect any aftereffect to be largest on the first of them and to fade quickly.'}
         </li>
       </ul>
 
@@ -119,15 +127,22 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
           Each point is one small mouse movement, so there is a lot of scatter from reach to reach. Look for consistent
           shifts across several reaches rather than at any single point.
         </li>
-        {preset.kind === 'canonical' ? (
+        {preset.kind === 'canonical' && (
           <li>
             You did the {preset.perturbation.kind} version; other people did the {otherKind} one. One person’s data
             cannot show whether the two versions differ. That needs many people in each version.
           </li>
-        ) : (
+        )}
+        {preset.kind === 'demo' && (
           <li>
             This was the Quick Demo, which is shorter than the standard activity and uses fewer targets. Its results
             should not be compared with results from the standard versions.
+          </li>
+        )}
+        {preset.kind === 'custom' && (
+          <li>
+            This was a custom protocol set up by your instructor (<code>{preset.id}</code>). Its settings differ from
+            the standard versions, so its results should not be compared or pooled with theirs.
           </li>
         )}
         {repeatRun && (

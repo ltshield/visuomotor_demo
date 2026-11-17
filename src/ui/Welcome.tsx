@@ -10,7 +10,9 @@
  */
 
 import { useEffect, useState } from 'react';
+import type { TrialTier } from '../core/custom';
 import { PointerLockInput } from '../input/pointerLock';
+import { INSTRUCTOR_PATH } from './route';
 
 /** Smallest window in which the workspace is comfortably usable (CSS px). */
 const MIN_WIDTH = 720;
@@ -43,13 +45,18 @@ function checkEnvironment(): EnvironmentCheck {
   };
 }
 
+/** Honest total-time ranges for each session length, including practice and reading the results. */
+const MINUTES: Record<TrialTier, string> = { quick: '3 to 5', standard: '5 to 10', extended: '8 to 12' };
+
 interface WelcomeProps {
   /** True when the page was opened through the Quick Demo link. */
   quickDemo: boolean;
+  /** Length of the session this link runs; only the time estimate depends on it. */
+  tier?: TrialTier;
   onStart: () => void;
 }
 
-export function Welcome({ quickDemo, onStart }: WelcomeProps) {
+export function Welcome({ quickDemo, tier = quickDemo ? 'quick' : 'standard', onStart }: WelcomeProps) {
   const [env, setEnv] = useState<EnvironmentCheck>(checkEnvironment);
 
   useEffect(() => {
@@ -70,7 +77,7 @@ export function Welcome({ quickDemo, onStart }: WelcomeProps) {
       )}
       <p className="lede">
         A short reaching activity. You will make quick movements to targets with your mouse, then explore a recording
-        of your own movements. It takes about {quickDemo ? '3 to 5' : '5 to 10'} minutes in total.
+        of your own movements. It takes about {MINUTES[tier]} minutes in total.
       </p>
 
       <section className="card">
@@ -144,7 +151,7 @@ export function Welcome({ quickDemo, onStart }: WelcomeProps) {
       </div>
 
       <p className="footer-links">
-        <a href="#/instructors">For instructors</a>
+        <a href={INSTRUCTOR_PATH}>For instructors</a>
       </p>
     </main>
   );

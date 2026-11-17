@@ -226,6 +226,62 @@ kbd {
   }
 }
 
+/* Settings on the instructor panel. */
+.setting {
+  margin: 0 0 16px;
+}
+
+.setting select {
+  font: inherit;
+  min-width: 240px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.setting-summary {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.setting-summary p {
+  margin-bottom: 6px;
+}
+
+.setting-summary .notice {
+  margin: 10px 0 0;
+}
+
+.estimate {
+  font-size: 1.1rem;
+}
+
+/* Collapsed reference material below the controls. */
+.reference {
+  margin-top: 6px;
+}
+
+.reference > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent-strong);
+  padding: 8px 0;
+}
+
+.reference h2 {
+  margin-top: 22px;
+}
+
 .footer-links {
   margin-top: 24px;
   font-size: 0.9rem;
@@ -1036,4 +1092,9 @@ legend,
 /* Equal caption height keeps the panels in a row aligned whatever the caption length. */
 .path-panel figcaption {
   min-height: 4.3em;
+}
+
+/* Keep "Copy custom link" on one line beside its address field. */
+.link-row-controls .button {
+  white-space: nowrap;
 }
