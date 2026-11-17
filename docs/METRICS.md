@@ -17,15 +17,20 @@ For every trial let
 
 - **u** = unit vector from the start toward the target,
 - **r** = position − start (of the hand, or of the cursor),
-- **D** = target distance (240 wu).
+- **D** = target distance (240 wu),
+- **A** = arrival radius (`crossing.radius` in the data): D − target radius = **222 wu** for every current preset, since they all require a hold on the target. For a preset without a hold (the retired v1 presets) A = D.
 
 ## Which part of the movement is analysed
 
-Only the **outward reach**: from the go cue (target onset, when hand and cursor are anchored at the start) to the instant the hand first reaches distance D from the start.
+Only the **outward reach**: from the go cue (target onset, when hand and cursor are anchored at the start) to **arrival**, the first moment the hand is A from the start.
 
-That instant is found by linear interpolation between the two samples that bracket it, so the endpoint lies exactly on the target circle and does not depend on how often the mouse reports. The sample after the crossing is kept in the raw data but excluded from metrics.
+A is the near edge of the target. A cursor resting anywhere inside the target circle has travelled at least that far, so every reach that registers has an arrival point. (The target's center would not do: someone who stops on the target falls short of its center about half the time.)
 
-The return to the center, the hold, and any movement during the pause after the reach are recorded separately and are **never** included in these metrics.
+Arrival is found by linear interpolation between the two samples that bracket it, so the endpoint lies exactly on the circle of radius A and does not depend on how often the mouse reports. The first sample at or beyond A (`crossing.sampleIndex`) is replaced by that interpolated point.
+
+What follows arrival is recorded but **never** included in these metrics: steering the cursor onto the target and holding it there until the reach registers (`settle` rows in the events CSV; drawn separately in the trial inspector). So path length, endpoint error and movement duration do not depend on how long someone took to settle. The center hold before the go cue is not included either, and there is no return movement: after each reach the cursor jumps back to the center.
+
+A reach that arrived but ran out of time before its hold registered (`outcome: timeout`, `holdCompleted: false`) is still valid and analysed: its outward movement is complete.
 
 ## Per-sample quantities
 
@@ -36,30 +41,34 @@ The return to the center, the hold, and any movement during the pause after the 
 
 ## Per-trial metrics
 
-Computed separately for the **hand** path and, when the cursor was visible, for the **cursor** path.
+Computed separately for the **hand** path and, when the cursor was visible, for the **cursor** path. "The path" is the outward path: go cue to arrival.
 
 | Metric | Definition |
 |---|---|
-| **Initial direction error** (°) | `atan2(lateral, progress)` at the point where the path **first reaches 25% of D** from the start (interpolated). It reflects the planned movement, before most visual corrections can act. It is *not* the final error. |
-| **Endpoint direction error** (°) | `atan2(lateral, progress)` at the crossing of the target distance. |
+| **Initial direction error** (°) | `atan2(lateral, progress)` at the point where the path **first reaches 25% of D** (60 wu) from the start (interpolated). It reflects the planned movement, before most visual corrections can act. It is *not* the final error. |
+| **Endpoint direction error** (°) | `atan2(lateral, progress)` at arrival (distance A from the start). |
 | **Maximum absolute lateral deviation** (wu) | Largest distance of the path from the straight start→target line. |
 | **Signed lateral deviation at maximum** (wu) | The signed value at that point; its sign tells which side. |
 | **Mean absolute lateral deviation** (wu) | Mean of \|lateral deviation\| along the path, weighted by path length (trapezoid rule per segment). Being length-weighted, it describes the path's shape and is not affected by pauses or by the mouse's report rate. |
 | **Mean signed lateral deviation** (wu) | The same average **keeping the sign** (`meanSignedLateralDeviation`, schema 2.1). This is the *whole-path error*: how far, on average along its length, the path ran to one side of the straight line. Deviations on opposite sides cancel, so an S-shaped path scores near 0 while its absolute mean does not. A straight path at angle *e* to the target line, out to radius *R*, scores R·sin(*e*)/2. |
-| **Path length** (wu) | Sum of the distances between successive path points, start to crossing. |
-| **Path efficiency** | Straight-line distance from start to crossing ÷ path length. 1 = perfectly straight. |
+| **Path length** (wu) | Sum of the distances between successive path points, start to arrival. |
+| **Path efficiency** | Straight-line distance from start to arrival (A) ÷ path length. 1 = perfectly straight. |
 
 Timing metrics (one per trial):
 
 | Metric | Definition |
 |---|---|
-| **Movement onset** | The hand first reaches 5% of D from the start (interpolated). |
+| **Movement onset** | The hand first reaches 5% of D (12 wu) from the start (interpolated). |
 | **Reaction time** (ms) | Movement onset − go cue. |
-| **Movement duration** (ms) | Crossing of the target distance − movement onset. |
+| **Movement duration** (ms) | Arrival − movement onset. It does not include settling onto the target or the hold. |
+
+The moment the reach registered (`times.holdCompletionMs`) is saved but is not a metric: it includes the settling and the 400 ms hold.
+
+**Speed instruction (v3 presets).** The movement duration is also what the speed instruction judges. When it exceeds `timing.maxMovementMs` (500 ms), the participant sees "Too slow" until the next target lights, and the attempt is saved with `tooSlow: true`. Nothing is excluded or changed: a slow reach is analysed like any other. The flag is there so that slow reaches can be examined or filtered, because a slow movement leaves time to steer the cursor back during the reach (see [Path error](#path-error-whole-path-error-of-what-the-participant-saw)). Reaction time is not judged: thinking before moving is allowed.
 
 ## Relationships worth knowing
 
-- Rotation is rigid, so the cursor is always exactly as far from the start as the hand. Both cross the target distance at the same instant.
+- Rotation is rigid, so the cursor is always exactly as far from the start as the hand. Both reach the arrival radius at the same instant.
 - For a straight reach, **cursor direction error = hand direction error + applied rotation**.
 - With a +45° rotation, a hand aimed straight at the target gives a cursor error of +45°; a hand aimed 45° clockwise (−45°) puts the cursor on the target.
 - The "full compensation" reference line on the results chart is `−(applied rotation)`: 0° in baseline, on catch trials and in the aftereffect block; −45° under the full rotation.
@@ -70,11 +79,11 @@ A trial's metrics are `null`, with a reason, rather than a misleading number:
 
 | `invalidReason` | When |
 |---|---|
-| `timeout` | The hand did not reach the target distance within the time allowed. |
-| `interrupted` | The mouse was released or the window lost focus during the reach. (The trial is then repeated; the repeat is the attempt that counts.) |
-| `too-few-samples` | The reach contains fewer than 4 samples (for example one enormous mouse jump), too few to describe a trajectory. |
+| `timeout` | The time limit (`timing.reachTimeoutMs`, 6 s from the go cue) came before the hand **arrived** at A. A reach that arrived but did not complete its hold in time also has `outcome: timeout`, but it is valid and analysed; only `holdCompleted` is false. |
+| `interrupted` | The mouse was released or the window lost focus during the reach. Its partial movement is never analysed, even if the hand had arrived. (The trial is then repeated; the repeat is the attempt that counts.) |
+| `too-few-samples` | The outward reach, from the go-cue sample to the first sample at or beyond A, contains fewer than 4 samples (for example one enormous mouse jump), too few to describe a trajectory. |
 
-The recorded samples of such attempts are still saved and can be viewed in the trial inspector.
+The recorded samples of such attempts are still saved and can be viewed in the trial inspector. The session summary's `trialsTimedOut` counts only `timeout` here, that is, reaches that never arrived.
 
 ## Summary values on the results page
 
