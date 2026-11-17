@@ -102,6 +102,7 @@ const PATH_METRIC_SUFFIXES = [
   'max_abs_lateral_dev',
   'signed_lateral_dev_at_max',
   'mean_abs_lateral_dev',
+  'mean_signed_lateral_dev',
   'path_length',
   'path_efficiency',
 ] as const;
@@ -114,6 +115,7 @@ function pathMetricCells(m: PathMetrics | null): Cell[] {
     m.maxAbsLateralDeviation,
     m.signedLateralDeviationAtMax,
     m.meanAbsLateralDeviation,
+    m.meanSignedLateralDeviation,
     m.pathLength,
     m.pathEfficiency,
   ];

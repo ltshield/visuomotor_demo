@@ -27,11 +27,15 @@ class TestStatement implements D1StatementLike {
     return new TestStatement(this.db, this.owner, this.sql, values as SqlValue[]);
   }
 
-  /** Execute synchronously; used directly and by `batch`. */
-  execute(): D1ResultLike {
+  /**
+   * Execute synchronously; used directly and by `batch`. Like D1, `all()` and
+   * `first()` return the statement's rows whatever kind of statement it is
+   * (SELECT, PRAGMA, ...); `run()` returns rows for a query and the change count otherwise.
+   */
+  execute(wantRows = false): D1ResultLike {
     this.owner.statementsRun += 1;
     const statement = this.db.prepare(this.sql);
-    if (/^\s*(SELECT|WITH)\b/i.test(this.sql)) {
+    if (wantRows || /^\s*(SELECT|WITH|PRAGMA)\b/i.test(this.sql)) {
       return { success: true, results: statement.all(...this.params) as Record<string, unknown>[], meta: { changes: 0 } };
     }
     const info = statement.run(...this.params);
@@ -43,11 +47,11 @@ class TestStatement implements D1StatementLike {
   }
 
   async all<T = Record<string, unknown>>(): Promise<D1ResultLike<T>> {
-    return this.execute() as D1ResultLike<T>;
+    return this.execute(true) as D1ResultLike<T>;
   }
 
   async first<T = Record<string, unknown>>(): Promise<T | null> {
-    const rows = this.execute().results ?? [];
+    const rows = this.execute(true).results ?? [];
     return (rows[0] as T | undefined) ?? null;
   }
 }

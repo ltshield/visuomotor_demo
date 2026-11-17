@@ -61,6 +61,14 @@ export interface PathMetrics {
   signedLateralDeviationAtMax: number;
   /** Mean distance of the path from the target axis, averaged along the path's length. */
   meanAbsLateralDeviation: number;
+  /**
+   * The WHOLE-PATH error: signed distance of the path from the target axis,
+   * averaged along the path's length (+ = counterclockwise side). Unlike the
+   * initial direction it includes any steering during the reach; unlike the
+   * absolute mean it keeps the side, so errors in opposite directions are not
+   * added up as if they were the same.
+   */
+  meanSignedLateralDeviation: number;
   /** Length of the path from the start to the crossing. */
   pathLength: number;
   /** Straight-line distance from start to crossing divided by path length; 1 = perfectly straight. */
@@ -231,13 +239,16 @@ export function computePathMetrics(
     }
   }
 
-  // Path length, and |lateral| averaged along it (trapezoid rule per segment).
+  // Path length, and lateral deviation averaged along it, with and without its
+  // sign (trapezoid rule per segment).
   let pathLength = 0;
   let weighted = 0;
+  let signedWeighted = 0;
   for (let i = 1; i < n; i++) {
     const segment = norm(sub(points[i], points[i - 1]));
     pathLength += segment;
     weighted += (segment * (Math.abs(lateral[i - 1]) + Math.abs(lateral[i]))) / 2;
+    signedWeighted += (segment * (lateral[i - 1] + lateral[i])) / 2;
   }
   if (pathLength <= 0) return null;
 
@@ -247,6 +258,8 @@ export function computePathMetrics(
     maxAbsLateralDeviation: maxAbs,
     signedLateralDeviationAtMax: signedAtMax,
     meanAbsLateralDeviation: weighted / pathLength,
+    // `+ 0` turns a negative zero into plain 0.
+    meanSignedLateralDeviation: signedWeighted / pathLength + 0,
     pathLength,
     pathEfficiency: norm(end) / pathLength,
   };

@@ -32,8 +32,8 @@ describe('buildSessionRecord: session-level fields', () => {
 
   it('identifies the app, schema, preset and assignment', () => {
     expect(session.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(session.app).toEqual({ name: 'visuomotor-learning-lab', version: '2.0.0' });
-    expect(session.schemaVersion).toBe('2.0.0');
+    expect(session.app).toEqual({ name: 'visuomotor-learning-lab', version: '2.1.0' });
+    expect(session.schemaVersion).toBe('2.1.0');
     expect(session.sessionId).toBe('test-session');
     expect(session.preset).toEqual(SUDDEN_45_V2);
     expect(session.preset.id).toBe('rotation-sudden-45-v2');

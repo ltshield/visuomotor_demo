@@ -445,7 +445,7 @@ try {
     return Math.hypot(t.samples.reach.cursorX[n] - t.targetX, t.samples.reach.cursorY[n] - t.targetY) <= session.preset.geometry.targetRadius;
   }));
   check('no movement is recorded after a reach (the dot jumps home)', session.trials.every((t) => t.samples.postReach.tMs.length === 0));
-  check('schema and app are version 2', session.schemaVersion === '2.0.0' && session.app.version === '2.0.0');
+  check('schema and app are version 2.1', session.schemaVersion === '2.1.0' && session.app.version === '2.1.0');
 
   // Protocol as executed.
   const phases = (name) => finals.filter((t) => t.phase === name);
@@ -485,6 +485,16 @@ try {
   check('hand initial direction matches the aimed direction on every reach', worstInitial < 1.5, `worst difference ${worstInitial.toFixed(2)}°`);
   check('hand direction on arrival matches the aimed direction on every reach', worstEndpoint < 0.75, `worst difference ${worstEndpoint.toFixed(2)}°`);
   check('cursor direction equals hand direction plus the applied rotation', worstCursor < 0.75, `worst difference ${worstCursor.toFixed(2)}°`);
+  // Whole-path error: the simulated learner reaches in straight lines, and a straight path at angle e to the
+  // target line, out to the arrival radius R, has a mean signed lateral deviation of R·sin(e)/2.
+  let worstPath = 0;
+  finals.forEach((t, i) => {
+    const seenDeg = log[i].aimDeg + (t.metrics.cursor ? t.appliedRotationDeg : 0);
+    const seen = t.metrics.cursor ?? t.metrics.hand;
+    worstPath = Math.max(worstPath, Math.abs(seen.meanSignedLateralDeviation - (arrivalRadius * Math.sin((seenDeg * Math.PI) / 180)) / 2));
+  });
+  check('whole-path error of the seen path matches the straight path that was made', worstPath < 2.5, `worst difference ${worstPath.toFixed(2)} units`);
+  check('the path-error chart is drawn on the results page', (await page.locator('#path-error-chart .recharts-surface').count()) === 1);
   check('the dot seen after the outward movement matched the recorded cursor direction on arrival', finals.every((t, i) => log[i].cursorErrorDeg === null || Math.abs(log[i].cursorErrorDeg - t.metrics.cursor.endpointDirectionErrorDeg) < 0.6));
   // Steering onto the target afterwards must not leak into the metrics: path length stops at arrival.
   check('path metrics stop at arrival, before the steering and the hold', finals.every((t) => t.metrics.hand.pathLength < arrivalRadius * 1.02 && t.crossing.sampleIndex < t.samples.reach.tMs.length));
@@ -526,7 +536,11 @@ try {
       check('a non-standard protocol gets its own view', (await classTab.locator('#class-view-select option').allInnerTexts()).some((t) => t.startsWith(session.preset.id)));
     }
     check('the class chart is drawn', (await classTab.locator('.class-view .recharts-surface').count()) >= 1);
+    check('the class view shows path error first', /^Path error on every trial/.test(await classTab.getByTestId('class-chart-title').innerText()));
     await classTab.screenshot({ path: path.join(outDir, '09b-class-view.png'), fullPage: true });
+    await classTab.getByRole('button', { name: 'Initial direction' }).click();
+    check('the class view switches to initial direction', (await classTab.getByTestId('class-chart-title').innerText()) === 'Initial direction error on every trial');
+    await classTab.screenshot({ path: path.join(outDir, '09c-class-view-direction.png'), fullPage: true });
     await classTab.close();
   }
 

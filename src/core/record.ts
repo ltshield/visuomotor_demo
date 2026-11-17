@@ -10,6 +10,9 @@
  * removed, or changes meaning (adding fields is a minor bump). The full field
  * reference is in docs/EXPORT_SCHEMA.md.
  *
+ *   2.1.0  Adds `metrics.hand/cursor.meanSignedLateralDeviation`, the
+ *          whole-path error (signed lateral deviation averaged along the
+ *          outward path). Nothing else changes; 2.0.0 files lack only this.
  *   2.0.0  Hold-to-complete and the jump home. `samples.reach` now runs to the
  *          end of the hold (not just to the crossing); `crossing` is the
  *          arrival at `crossing.radius` and gains `sampleIndex`; `valid` means
@@ -53,8 +56,8 @@ import type {
 } from './session';
 
 export const APP_NAME = 'visuomotor-learning-lab';
-export const APP_VERSION = '2.0.0';
-export const SCHEMA_VERSION = '2.0.0';
+export const APP_VERSION = '2.1.0';
+export const SCHEMA_VERSION = '2.1.0';
 
 /** Plain-language key to units and signs, embedded in every file so it can be read on its own. */
 export const CONVENTIONS = {
@@ -283,6 +286,26 @@ export function finalAttempts(session: SessionRecord): TrialExport[] {
 /** Adapter: the parts of a saved trial that path analysis needs. */
 export function reachDataOf(trial: TrialExport): ReachData {
   return { outcome: trial.outcome, crossing: trial.crossing, reach: trial.samples.reach };
+}
+
+/**
+ * The whole-path error of the path the participant SAW: the cursor's signed
+ * lateral deviation averaged along its outward path, in % of the target
+ * distance (+ = counterclockwise). On a reach made with the cursor hidden
+ * there was no rotation, so the cursor would have followed the hand exactly
+ * and the hand's path stands in for it. Null when there is no value (an
+ * invalid reach, or a file written before schema 2.1 that lacks the metric).
+ *
+ * Why the cursor and not the hand: once a participant has adapted, their HAND
+ * path is supposed to run off to the side of the straight line to the target
+ * (that is what cancels the rotation), so a hand-path "error" would score good
+ * adaptation as a large error. The cursor path is the error they experienced.
+ */
+export function seenPathErrorPct(t: TrialExport, targetDistance: number): number | null {
+  if (!t.valid) return null;
+  const m = t.metrics.cursor ?? (t.appliedRotationDeg === 0 ? t.metrics.hand : null);
+  const value = m?.meanSignedLateralDeviation;
+  return typeof value === 'number' ? (value / targetDistance) * 100 : null;
 }
 
 /** Returns a copy of the record with the reflection answers attached. */

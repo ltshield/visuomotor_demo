@@ -5,17 +5,29 @@
 import { describe, expect, it } from 'vitest';
 import type { ClassSession, WirePhase, WireTrial } from '../../core/classWire';
 import { GRADUAL_45_V2, QUICK_DEMO_45_V2, SUDDEN_45_V2 } from '../../core/presets';
-import { MAX_LINES_PER_SERIES, bandOfTrial, buildClassModel, chartRows, meanSd } from './model';
+import { MAX_LINES_PER_SERIES, bandOfTrial, buildClassModel, chartRows, meanSd, valueOf } from './model';
 
 /** The standard layout: 8 baseline, 24 rotated (catch at trials 20 and 28), 8 aftereffect. */
 const PHASE_OF = (i: number): WirePhase => (i < 8 ? 'baseline' : i < 32 ? 'adaptation' : 'aftereffect');
 const IS_CATCH = (i: number) => i === 19 || i === 27;
 
-/** A 40-reach session whose error on reach i is err(i) (null = not analysed). */
+/**
+ * A 40-reach session whose initial direction error on reach i is err(i)
+ * (null = not analysed). Its path error is always twice that, so tests can
+ * tell which measure a number came from.
+ */
 function session(presetId: string, err: (i: number) => number | null, trialCount = 40): ClassSession {
   const trials: WireTrial[] = Array.from({ length: trialCount }, (_, i) => {
     const value = err(i);
-    return { i, phase: PHASE_OF(i), catch: IS_CATCH(i), rot: PHASE_OF(i) === 'adaptation' && !IS_CATCH(i) ? 45 : 0, err: value, valid: value !== null };
+    return {
+      i,
+      phase: PHASE_OF(i),
+      catch: IS_CATCH(i),
+      rot: PHASE_OF(i) === 'adaptation' && !IS_CATCH(i) ? 45 : 0,
+      err: value,
+      pe: value === null ? null : value * 2,
+      valid: value !== null,
+    };
   });
   return { presetId, rotationDeg: 45, trialTier: 'standard', consciousAdjustment: null, trials };
 }
@@ -101,6 +113,31 @@ describe('buildClassModel', () => {
     const view = buildClassModel([quick]).views[1];
     expect(view.trialCount).toBe(16);
     expect(view.bands.map((b) => b.phase)).toEqual(['baseline', 'adaptation']);
+  });
+});
+
+describe('the measure shown', () => {
+  it('uses the initial direction by default and the path error when asked, everywhere', () => {
+    const sessions = [session(SUDDEN_45_V2.id, (i) => (i === 19 ? -10 : i === 32 ? -6 : 1))];
+    const byDirection = buildClassModel(sessions).views[0];
+    const byPath = buildClassModel(sessions, 'pe').views[0];
+    expect(byDirection.metric).toBe('err');
+    expect(byPath.metric).toBe('pe');
+    expect(byDirection.series[0].perTrial[0].mean).toBe(1);
+    expect(byPath.series[0].perTrial[0].mean).toBe(2);
+    expect(byPath.series[0].firstAftereffect.mean).toBe(-12);
+    expect(byPath.series[0].baseline.mean).toBe(2);
+    expect(chartRows(byPath)[0].sudden_0).toBe(2);
+  });
+
+  it('treats a reach with no path error as missing, even when its direction is known', () => {
+    const s = session(GRADUAL_45_V2.id, constant(4));
+    s.trials[2] = { ...s.trials[2], pe: null };
+    expect(valueOf(s.trials[2], 'pe')).toBeNull();
+    expect(valueOf(s.trials[2], 'err')).toBe(4);
+    expect(buildClassModel([s], 'pe').views[0].series[1].perTrial[2].n).toBe(0);
+    // An invalid reach has no value in either measure.
+    expect(valueOf({ ...s.trials[3], valid: false }, 'pe')).toBeNull();
   });
 });
 

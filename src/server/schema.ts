@@ -28,7 +28,17 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
   rotationApplied REAL NOT NULL,
   initialDirErrorDeg REAL,
   valid INTEGER NOT NULL,
+  pathErrorPct REAL,
   PRIMARY KEY (sessionId, trialIndex)
 )`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_class ON sessions(classCode)`,
+];
+
+/**
+ * Columns added after the first version of the schema. A database created
+ * before a column existed gets it added (ALTER TABLE ... ADD COLUMN) the first
+ * time the API runs against it, so an existing class database keeps working.
+ */
+export const ADDED_COLUMNS: ReadonlyArray<{ table: string; column: string; type: string }> = [
+  { table: 'trial_errors', column: 'pathErrorPct', type: 'REAL' },
 ];

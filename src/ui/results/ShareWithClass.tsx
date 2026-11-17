@@ -70,9 +70,9 @@ export function ShareWithClass({ session, onShared, fetchImpl }: ShareWithClassP
       ) : (
         <>
           <p className="small muted">
-            Optional. This adds an <strong>anonymous</strong> summary to a class view your professor can show: one
-            number per reach (your initial direction error), which version you did, and your answer to the question
-            about adjusting your aim. No name, no movement traces and nothing about this computer is sent, and nobody
+            Optional. This adds an <strong>anonymous</strong> summary to a class view your professor can show: two
+            numbers per reach (your initial direction error and the path error of the cursor), which version you did,
+            and your answer to the question about adjusting your aim. No name, no movement traces and nothing about this computer is sent, and nobody
             can tell which line is yours.
           </p>
           <form className="share-form" onSubmit={share}>
@@ -115,7 +115,8 @@ export function ShareWithClass({ session, onShared, fetchImpl }: ShareWithClassP
             <summary>See exactly what would be sent</summary>
             <p className="small muted">
               {preview.trials.length} reaches. For each: its position, block, whether it was a catch trial, the
-              rotation applied, and your initial direction error (or none, if that reach could not be analysed). The
+              rotation applied, your initial direction error (<code>err</code>) and the path error of the cursor
+              (<code>pe</code>), or none if that reach could not be analysed. The
               session id below is a random label; it only lets a second press replace your first instead of adding
               you twice, and it is never shown to anyone.
             </p>

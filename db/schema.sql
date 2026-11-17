@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS trial_errors (
   rotationApplied REAL NOT NULL,
   initialDirErrorDeg REAL,      -- NULL if the reach had no usable value
   valid INTEGER NOT NULL,       -- 0 or 1
+  pathErrorPct REAL,            -- whole-path error of the cursor path, % of the target distance; NULL if none
   PRIMARY KEY (sessionId, trialIndex)
 );
 

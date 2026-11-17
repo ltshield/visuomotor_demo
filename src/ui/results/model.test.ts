@@ -11,6 +11,7 @@ import type { TrialSpec } from '../../core/schedule';
 import { scriptedSessionRecord } from '../../core/testUtils';
 import {
   PROGRESS_LEVELS_PCT,
+  aimAndArrival,
   catchCallout,
   catchComparisons,
   describeDirection,
@@ -21,6 +22,7 @@ import {
   pathPanels,
   phaseBands,
   resampleByProgress,
+  seenPathError,
   signedWithDirection,
   trialPoints,
   unavailableReason,
@@ -452,6 +454,59 @@ describe('catchCallout', () => {
   });
 });
 
+describe('whole-path error of the seen path', () => {
+  // The scripted reaches are straight lines in the aimed direction, out to the
+  // arrival radius R. A straight path at angle e to the target line has a mean
+  // signed lateral deviation of R·sin(e)/2.
+  const R = ARRIVAL * D;
+  const expected = (errorDeg: number) => ((R * Math.sin((errorDeg * Math.PI) / 180)) / 2 / D) * 100;
+
+  it('uses the cursor on rotated reaches: aim plus rotation', () => {
+    const finals = finalAttempts(sudden);
+    const points = trialPoints(sudden);
+    const rotatedIndex = finals.findIndex((t) => t.appliedRotationDeg === 45);
+    // Hand aimed −35°, cursor rotated +45°: the cursor went +10° off the line.
+    expect(points[rotatedIndex].pathErrorPct).toBeCloseTo(expected(-35 + 45), 4);
+    expect(seenPathError(finals[rotatedIndex], D)).toBeCloseTo(expected(10), 4);
+  });
+
+  it('uses the hand where the cursor was hidden (no rotation), and on catch trials', () => {
+    const points = trialPoints(sudden);
+    const baseline = points.find((p) => p.phase === 'baseline')!;
+    expect(baseline.cursorShown).toBe(false);
+    expect(baseline.pathErrorPct).toBeCloseTo(expected(3), 4);
+    const after = points.find((p) => p.phase === 'aftereffect')!;
+    expect(after.pathErrorPct).toBeCloseTo(expected(-18), 4);
+    const caught = points.find((p) => p.isCatch)!;
+    expect(caught.pathErrorPct).toBeCloseTo(expected(-35), 4);
+  });
+
+  it('has no value for an invalid reach, or for a hidden reach that was somehow rotated', () => {
+    const finals = finalAttempts(withTimeout(sudden, 5));
+    expect(seenPathError(finals[4], D)).toBeNull();
+    const rotatedHidden = { ...finalAttempts(sudden)[0], appliedRotationDeg: 45 };
+    expect(seenPathError(rotatedHidden, D)).toBeNull();
+  });
+
+  it('is averaged over valid reaches by groupAverages', () => {
+    const a = groupAverages(sudden, [1, 2, 3]);
+    expect(a.pathErrorPct).toBeCloseTo(expected(3), 4);
+  });
+});
+
+describe('aimAndArrival', () => {
+  it('averages where the hand set off and where it arrived, with the rotation', () => {
+    const late = sudden.summary.latePerturbed.trialNumbers;
+    const v = aimAndArrival(sudden, late)!;
+    expect(v.n).toBe(late.length);
+    // Straight scripted reaches: set-off and arrival directions agree.
+    expect(v.initialDeg).toBeCloseTo(-35, 0);
+    expect(v.arrivalDeg).toBeCloseTo(-35, 0);
+    expect(v.rotationDeg).toBe(45);
+    expect(aimAndArrival(sudden, [])).toBeNull();
+  });
+});
+
 describe('groupAverages', () => {
   it('averages path efficiency and movement time over valid reaches only', () => {
     const finals = finalAttempts(sudden);
@@ -467,8 +522,8 @@ describe('groupAverages', () => {
   });
 
   it('is null for an empty group or one with no valid reach', () => {
-    expect(groupAverages(sudden, [])).toEqual({ pathEfficiency: null, movementTimeMs: null });
-    expect(groupAverages(withTimeout(sudden, 5), [5])).toEqual({ pathEfficiency: null, movementTimeMs: null });
+    expect(groupAverages(sudden, [])).toEqual({ pathEfficiency: null, movementTimeMs: null, pathErrorPct: null });
+    expect(groupAverages(withTimeout(sudden, 5), [5])).toEqual({ pathEfficiency: null, movementTimeMs: null, pathErrorPct: null });
   });
 });
 

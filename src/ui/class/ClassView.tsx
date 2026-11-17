@@ -3,8 +3,9 @@
  * classroom projector. Not part of the student flow.
  *
  * It shows every anonymous session shared with one class code: each student
- * as a thin line (initial direction error against trial number), with the mean
- * and a ±1 SD band on top, one colour per standard version. It asks the server
+ * as a thin line against trial number, with the mean and a ±1 SD band on top,
+ * one colour per standard version. Two measures, switchable: the path error of
+ * the cursor (shown first) and the initial hand direction. It asks the server
  * for news every 15 seconds, so curves appear as students share.
  *
  * WHAT THE PAGE MUST NOT DO
@@ -39,7 +40,7 @@ import {
 } from 'recharts';
 import { normalizeClassCode, type ClassResponse } from '../../core/classWire';
 import { fetchClass, type FetchLike } from '../classClient';
-import { formatSignedDeg } from '../presetText';
+import { formatSignedDeg, formatSignedPct } from '../presetText';
 import { AXIS_TICK, LegendRow, TooltipCard, VIZ, diamondPoints, type LegendItem } from '../results/chartTheme';
 import { INSTRUCTOR_PATH } from '../route';
 import {
@@ -47,6 +48,7 @@ import {
   bandOfTrial,
   buildClassModel,
   chartRows,
+  type ClassMetric,
   type ClassSeries,
   type ClassViewModel,
   type MeanSd,
@@ -64,11 +66,59 @@ const PLOT_HEIGHT = 440;
 
 const clock = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
+/** Everything about the page that depends on the measure shown. */
+const MEASURES: Record<
+  ClassMetric,
+  {
+    name: string;
+    unit: string;
+    format: (value: number) => string;
+    /** y-axis tick step. */
+    step: number;
+    title: string;
+    intro: ReactElement;
+    note: string;
+  }
+> = {
+  pe: {
+    name: 'Path error',
+    unit: '%',
+    format: (v) => formatSignedPct(v),
+    step: 10,
+    title: 'Path error on every trial: how far the cursor’s path strayed from the straight line',
+    intro: (
+      <>
+        How far each student’s whole cursor path ran to the side of the straight line to the target, on average, as a
+        percentage of the distance to the target. <strong>0% is a straight path to the target</strong>; positive is
+        counterclockwise, the way the rotation pushed the cursor. It includes steering during the reach, so it is the
+        error students saw. (With the cursor hidden there was no rotation, so the hand’s path is used.) Every thin line
+        is one student.
+      </>
+    ),
+    note: 'Path error of the cursor, in % of the distance to the target; 0% is a straight path to it.',
+  },
+  err: {
+    name: 'Initial direction',
+    unit: '°',
+    format: (v) => formatSignedDeg(v),
+    step: 15,
+    title: 'Initial direction error on every trial',
+    intro: (
+      <>
+        The direction each hand set off in, measured a quarter of the way to the target, before much correction is
+        possible. <strong>0° is straight at the target</strong>; negative is clockwise. Every thin line is one student.
+      </>
+    ),
+    note: 'Initial hand direction; 0° is straight at the target.',
+  },
+};
+
 /** "−32.4° ± 8.1°", "−32.4°" (one value), or "no data". */
-function meanText(stats: MeanSd): string {
+function meanText(stats: MeanSd, metric: ClassMetric): string {
   if (stats.mean === null) return 'no data yet';
-  const mean = formatSignedDeg(stats.mean);
-  return stats.sd === null ? mean : `${mean} ± ${Math.abs(stats.sd).toFixed(1)}°`;
+  const { format, unit } = MEASURES[metric];
+  const mean = format(stats.mean);
+  return stats.sd === null ? mean : `${mean} ± ${Math.abs(stats.sd).toFixed(1)}${unit}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,11 +135,13 @@ function trialTicks(trialCount: number): number[] {
 function ClassChart({ view }: { view: ClassViewModel }) {
   const rows = useMemo(() => chartRows(view), [view]);
   const shown = view.series.filter((s) => s.sessions.length > 0);
+  const measure = MEASURES[view.metric];
+  const step = measure.step;
 
-  // y range: every plotted value and band edge, rounded outward to 15°, always including 0.
+  // y range: every plotted value and band edge, rounded outward to the tick step, always including 0.
   const yRange = useMemo(() => {
-    let low = -15;
-    let high = 15;
+    let low = -step;
+    let high = step;
     for (const row of rows) {
       for (const [key, value] of Object.entries(row)) {
         if (key === 'trial' || key.endsWith('_n')) continue;
@@ -101,9 +153,10 @@ function ClassChart({ view }: { view: ClassViewModel }) {
         }
       }
     }
-    return [Math.max(-180, Math.floor((low - 4) / 15) * 15), Math.min(180, Math.ceil((high + 4) / 15) * 15)] as const;
-  }, [rows]);
-  const yStep = yRange[1] - yRange[0] > 150 ? 30 : 15;
+    const limit = view.metric === 'err' ? 180 : 200;
+    return [Math.max(-limit, Math.floor((low - 4) / step) * step), Math.min(limit, Math.ceil((high + 4) / step) * step)] as const;
+  }, [rows, step, view.metric]);
+  const yStep = yRange[1] - yRange[0] > 10 * step ? 2 * step : step;
   const yTicks: number[] = [];
   for (let v = Math.ceil(yRange[0] / yStep) * yStep; v <= yRange[1]; v += yStep) yTicks.push(v);
 
@@ -123,8 +176,8 @@ function ClassChart({ view }: { view: ClassViewModel }) {
   const nudges = new Map<string, number>();
   if (shown.length === 2) {
     const [a, b] = shown.map(lastMean);
-    const pixelsPerDegree = (PLOT_HEIGHT - PLOT_MARGIN.top - PLOT_MARGIN.bottom - 30) / (yRange[1] - yRange[0]);
-    if (a !== null && b !== null && Math.abs(a - b) * pixelsPerDegree < 18) {
+    const pixelsPerUnit = (PLOT_HEIGHT - PLOT_MARGIN.top - PLOT_MARGIN.bottom - 30) / (yRange[1] - yRange[0]);
+    if (a !== null && b !== null && Math.abs(a - b) * pixelsPerUnit < 18) {
       // The series with the higher value sits higher on screen: move its label up, the other down.
       nudges.set(shown[0].key, a >= b ? -9 : 9);
       nudges.set(shown[1].key, a >= b ? 9 : -9);
@@ -160,7 +213,12 @@ function ClassChart({ view }: { view: ClassViewModel }) {
   };
 
   return (
-    <div className="viz-plot" style={{ height: PLOT_HEIGHT }} role="img" aria-label="Initial direction error on each trial, one line per shared session, with the mean and one standard deviation for each version">
+    <div
+      className="viz-plot"
+      style={{ height: PLOT_HEIGHT }}
+      role="img"
+      aria-label={`${measure.name} on each trial, one line per shared session, with the mean and one standard deviation for each version`}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={PLOT_MARGIN}>
           {view.bands.map((band) => (
@@ -199,7 +257,7 @@ function ClassChart({ view }: { view: ClassViewModel }) {
           <YAxis
             domain={[yRange[0], yRange[1]]}
             ticks={yTicks}
-            tickFormatter={(v: number) => `${v}°`}
+            tickFormatter={(v: number) => `${v}${measure.unit}`}
             tick={AXIS_TICK}
             tickLine={false}
             axisLine={false}
@@ -234,12 +292,12 @@ function ClassChart({ view }: { view: ClassViewModel }) {
                   rows={shown.map((series) => {
                     const stats = series.perTrial[trial - 1];
                     return {
-                      value: meanText(stats),
+                      value: meanText(stats, view.metric),
                       label: `${series.label}: mean ± SD of ${stats.n}`,
                       color: colorOf(series),
                     };
                   })}
-                  note="Initial hand direction; 0° is straight at the target."
+                  note={measure.note}
                 />
               );
             }}
@@ -302,7 +360,7 @@ function ClassChart({ view }: { view: ClassViewModel }) {
 // ---------------------------------------------------------------------------
 
 function SummaryPanel({ view, total }: { view: ClassViewModel; total: number }) {
-  const cell = (stats: MeanSd) => (stats.mean === null ? '–' : `${meanText(stats)}  (n = ${stats.n})`);
+  const cell = (stats: MeanSd) => (stats.mean === null ? '–' : `${meanText(stats, view.metric)}  (n = ${stats.n})`);
   return (
     <section className="card" data-testid="class-summary">
       <h2>Summary</h2>
@@ -324,7 +382,7 @@ function SummaryPanel({ view, total }: { view: ClassViewModel; total: number }) 
       <table className="data-table class-stats">
         <thead>
           <tr>
-            <th>Mean across students (± SD)</th>
+            <th>{MEASURES[view.metric].name}: mean across students (± SD)</th>
             {view.series.map((series) => (
               <th key={series.key} className="num">
                 {series.label}
@@ -342,7 +400,7 @@ function SummaryPanel({ view, total }: { view: ClassViewModel; total: number }) 
             ))}
           </tr>
           <tr>
-            <th scope="row">Catch trial error</th>
+            <th scope="row">Catch trials</th>
             {view.series.map((series) => (
               <td key={series.key} className="num" data-testid={`class-catch-${series.key}`}>
                 {cell(series.catchError)}
@@ -350,7 +408,7 @@ function SummaryPanel({ view, total }: { view: ClassViewModel; total: number }) 
             ))}
           </tr>
           <tr>
-            <th scope="row">First aftereffect error</th>
+            <th scope="row">First aftereffect reach</th>
             {view.series.map((series) => (
               <td key={series.key} className="num" data-testid={`class-aftereffect-${series.key}`}>
                 {cell(series.firstAftereffect)}
@@ -360,9 +418,11 @@ function SummaryPanel({ view, total }: { view: ClassViewModel; total: number }) 
         </tbody>
       </table>
       <p className="viz-footnote">
-        Initial hand direction error in degrees; negative is clockwise of the target. A student with two catch trials
-        counts once (their mean). Reaches that could not be analysed are left out, so n can be smaller than the number
-        of submissions.
+        {view.metric === 'pe'
+          ? 'Path error of the cursor in % of the distance to the target; negative is clockwise of the straight line. With the rotation on, a positive error is the rotation still showing; on catch trials and in the aftereffect block a negative one is compensation carried over.'
+          : 'Initial hand direction error in degrees; negative is clockwise of the target.'}{' '}
+        A student with two catch trials counts once (their mean). Reaches that could not be analysed are left out, so n
+        can be smaller than the number of submissions.
       </p>
       <p className="viz-footnote">
         <strong>Descriptive only.</strong> These are the students who chose to share, in whatever numbers they happened
@@ -402,7 +462,7 @@ function TrialMeansTable({ view }: { view: ClassViewModel }) {
                     const stats = series.perTrial[i];
                     return (
                       <td key={series.key} className="num">
-                        {stats.mean === null ? '' : `${meanText(stats)} (${stats.n})`}
+                        {stats.mean === null ? '' : `${meanText(stats, view.metric)} (${stats.n})`}
                       </td>
                     );
                   })}
@@ -435,6 +495,8 @@ export function ClassView({ code, fetchImpl, pollMs = POLL_MS }: ClassViewProps)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [problem, setProblem] = useState<{ message: string; at: Date; fatal: boolean } | null>(null);
   const [viewKey, setViewKey] = useState('standard');
+  /** Path error first: it shows the error students experienced, and the sudden/gradual contrast most plainly. */
+  const [metric, setMetric] = useState<ClassMetric>('pe');
   const [refreshToken, setRefreshToken] = useState(0);
   const etag = useRef<string | null>(null);
   const inFlight = useRef(false);
@@ -479,7 +541,7 @@ export function ClassView({ code, fetchImpl, pollMs = POLL_MS }: ClassViewProps)
     };
   }, [classCode, fetchImpl, pollMs, refreshToken]);
 
-  const model = useMemo(() => buildClassModel(data?.sessions ?? []), [data]);
+  const model = useMemo(() => buildClassModel(data?.sessions ?? [], metric), [data, metric]);
 
   if (classCode === null) {
     return (
@@ -566,11 +628,18 @@ export function ClassView({ code, fetchImpl, pollMs = POLL_MS }: ClassViewProps)
       )}
 
       <section className="card viz-card">
-        <h2>Initial direction error on every trial</h2>
-        <p className="viz-intro">
-          The direction each hand set off in, measured a quarter of the way to the target. <strong>0° is straight at
-          the target</strong>; negative is clockwise. Every thin line is one student.
-        </p>
+        <div className="results-toolbar class-measure" role="group" aria-label="Which measure the chart shows">
+          <span className="results-toolbar-label">Measure shown:</span>
+          <div className="segmented">
+            {(['pe', 'err'] as const).map((m) => (
+              <button key={m} type="button" className={metric === m ? 'is-on' : ''} aria-pressed={metric === m} onClick={() => setMetric(m)}>
+                {MEASURES[m].name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <h2 data-testid="class-chart-title">{MEASURES[metric].title}</h2>
+        <p className="viz-intro">{MEASURES[metric].intro}</p>
         <LegendRow items={legend} />
         <ClassChart view={view} />
         {view.sessionCount === 0 && (

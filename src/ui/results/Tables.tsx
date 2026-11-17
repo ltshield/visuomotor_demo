@@ -13,7 +13,7 @@
 
 import type { GroupMean } from '../../core/analysis';
 import type { SessionRecord } from '../../core/record';
-import { formatDeg, formatSignedDeg } from '../presetText';
+import { formatDeg, formatSignedDeg, formatSignedPct } from '../presetText';
 import { InfoNotes, METRIC_INFO } from './InfoNote';
 import { groupAverages, type PhaseBand, type TrialPoint } from './model';
 
@@ -87,6 +87,7 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
             <th className="num">Cursor rotation (mean)</th>
             <th className="num">Initial hand direction (mean)</th>
             <th className="num">Relative to your baseline</th>
+            <th className="num">Path error (mean)</th>
             <th className="num">Path efficiency (mean)</th>
             <th className="num">Movement time (mean)</th>
             <th className="num">Reaches with a value</th>
@@ -104,6 +105,7 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
                 <td className="num">
                   {row.isBaseline || row.value === null || baseline === null ? '–' : formatSignedDeg(row.value - baseline, 1)}
                 </td>
+                <td className="num">{extra.pathErrorPct === null ? '–' : formatSignedPct(extra.pathErrorPct)}</td>
                 <td className="num">{extra.pathEfficiency === null ? '–' : extra.pathEfficiency.toFixed(2)}</td>
                 <td className="num">{extra.movementTimeMs === null ? '–' : `${Math.round(extra.movementTimeMs)} ms`}</td>
                 <td className="num">{row.count}</td>
@@ -112,10 +114,13 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
           })}
         </tbody>
       </table>
-      <InfoNotes items={[METRIC_INFO.initialDirection, METRIC_INFO.pathEfficiency, METRIC_INFO.movementTime]} />
+      <InfoNotes
+        items={[METRIC_INFO.initialDirection, METRIC_INFO.pathError, METRIC_INFO.aimVersusSteering, METRIC_INFO.pathEfficiency, METRIC_INFO.movementTime]}
+      />
       <p className="viz-footnote">
         Initial hand direction is measured a quarter of the way to the target; 0° is straight at the target and negative
-        is clockwise. These numbers describe your own reaches only. They are not statistical tests, and a mean of four
+        is clockwise. Path error is the cursor’s whole path, as a percentage of the distance to the target; 0% is a
+        straight path to it. These numbers describe your own reaches only. They are not statistical tests, and a mean of four
         reaches (or a single reach) is a rough guide at best.
       </p>
     </>
@@ -145,6 +150,7 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
               <th className="num">Initial hand direction</th>
               <th className="num">Hand direction on arrival</th>
               <th className="num">Initial cursor direction</th>
+              <th className="num">Path error (cursor)</th>
               <th className="num">Hand path efficiency</th>
               <th className="num">Reaction time (ms)</th>
               <th className="num">Movement time (ms)</th>
@@ -164,6 +170,7 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
                   <td className="num">{cell(p.handInitialDeg)}</td>
                   <td className="num">{cell(p.handEndpointDeg)}</td>
                   <td className="num">{cell(p.cursorInitialDeg)}</td>
+                  <td className="num">{p.pathErrorPct === null ? '' : formatSignedPct(p.pathErrorPct)}</td>
                   <td className="num">{m?.hand ? m.hand.pathEfficiency.toFixed(3) : ''}</td>
                   <td className="num">{m?.reactionTimeMs != null ? Math.round(m.reactionTimeMs) : ''}</td>
                   <td className="num">{m?.movementDurationMs != null ? Math.round(m.movementDurationMs) : ''}</td>

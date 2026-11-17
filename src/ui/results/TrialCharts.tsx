@@ -1,16 +1,17 @@
 /**
- * TrialCharts.tsx — the two per-trial charts, which share one x axis (trial
+ * TrialCharts.tsx — the per-trial charts, which share one x axis (trial
  * number) and the same shaded blocks so they can be read one above the other:
  *
  *   RotationTimeline     what the software did: cursor rotation on every trial
  *   DirectionErrorChart  what the participant did: initial direction on every trial
+ *   PathErrorChart       what the participant saw: whole-path error of the cursor
  *
  * Both are single-axis charts (never two y-scales in one plot). Catch trials
  * are marked three ways — colour, a diamond, and the word "catch" — so they
  * stand out without relying on colour alone. Trials without a valid value are
  * left as gaps rather than interpolated.
  *
- * Key exports: `RotationTimeline`, `DirectionErrorChart`.
+ * Key exports: `RotationTimeline`, `DirectionErrorChart`, `PathErrorChart`.
  */
 
 import { useMemo, type Key, type ReactElement } from 'react';
@@ -25,7 +26,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatDeg, formatSignedDeg } from '../presetText';
+import { formatDeg, formatSignedDeg, formatSignedPct } from '../presetText';
 import { AXIS_TICK, ChartCard, SeriesDot, TooltipCard, VIZ, type LegendItem } from './chartTheme';
 import { METRIC_INFO } from './InfoNote';
 import { describeDirection, initialErrorFor, type PathKind, type PhaseBand, type TrialPoint } from './model';
@@ -399,6 +400,149 @@ export function DirectionErrorChart({ points, bands, kind, onSelectTrial }: Dire
                 isAnimationActive={false}
               />
             )}
+            <Line
+              dataKey="value"
+              type="linear"
+              stroke={VIZ.move}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              connectNulls={false}
+              isAnimationActive={false}
+              dot={makeDot(false, (p) => ((p as { value?: number | null }).value ?? 0) < 0 ? 'below' : 'above')}
+              activeDot={makeDot(true, () => 'above')}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </ChartCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Whole-path error by trial
+// ---------------------------------------------------------------------------
+
+interface PathErrorProps {
+  points: TrialPoint[];
+  bands: PhaseBand[];
+  onSelectTrial: (trialNumber: number) => void;
+}
+
+/** "22.4% of the distance to the target, counterclockwise of the straight line", or "Straight to the target". */
+function pathErrorWords(value: number): string {
+  const rounded = Number(Math.abs(value).toFixed(1));
+  if (rounded === 0) return 'A straight path to the target';
+  return `On average ${rounded}% of the distance to the target ${value < 0 ? 'clockwise' : 'counterclockwise'} of the straight line`;
+}
+
+/**
+ * The whole-path error of the path the participant saw, on every reach. Always
+ * the cursor's path (the hand's where the cursor was hidden, as there was no
+ * rotation then), whatever the page's hand/cursor switch says: once someone
+ * has adapted, their hand path is MEANT to run off the straight line, so a
+ * hand-path "error" would score good adaptation as a big error.
+ */
+export function PathErrorChart({ points, bands, onSelectTrial }: PathErrorProps) {
+  const rows = useMemo(
+    () => points.map((p) => ({ trial: p.trialNumber, value: p.pathErrorPct, isCatch: p.isCatch, point: p })),
+    [points],
+  );
+  const plotted = rows.map((r) => r.value).filter((v): v is number => v !== null);
+  if (plotted.length === 0) return null;
+
+  // Round outward to multiples of 10%, always including 0, with a little headroom.
+  const yMin = Math.floor((Math.min(0, ...plotted) - 3) / 10) * 10;
+  const yMax = Math.ceil((Math.max(0, ...plotted) + 3) / 10) * 10;
+  const yStep = yMax - yMin > 100 ? 20 : 10;
+  const yTicks: number[] = [];
+  for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax; v += yStep) yTicks.push(v);
+
+  const legend: LegendItem[] = [{ key: 'dot', color: VIZ.move, label: 'Path error of the cursor on one reach' }];
+  if (points.some((p) => p.isCatch)) legend.push({ key: 'diamond', color: VIZ.catchTrial, label: 'Catch trial (rotation off)' });
+
+  return (
+    <ChartCard
+      id="path-error-chart"
+      title="What you saw: how far the cursor’s whole path strayed from the straight line"
+      intro={
+        <>
+          Each point is one whole outward reach: how far, on average along its path, the cursor ran to the side of the
+          straight line from the start to the target, as a percentage of the distance to the target.{' '}
+          <strong>0% is a straight path to the target.</strong> Above 0 is counterclockwise, the way the rotation pushed
+          the cursor; below 0 is clockwise. Unlike the chart above, this includes any steering you did while moving.
+          Where the cursor was hidden there was no rotation, so the point shows your hand’s path. This chart always
+          shows the cursor, whichever path the switch above selects.
+        </>
+      }
+      info={[METRIC_INFO.pathError, METRIC_INFO.aimVersusSteering]}
+      legend={legend}
+    >
+      <div className="viz-plot is-clickable" style={{ height: 320 }} role="img" aria-label="Whole-path error of the cursor on each trial">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={rows}
+            margin={PLOT_MARGIN}
+            syncId={SYNC_ID}
+            onClick={(state) => {
+              const index = Number(state?.activeTooltipIndex);
+              if (Number.isInteger(index) && rows[index]) onSelectTrial(rows[index].trial);
+            }}
+          >
+            {renderBands(bands)}
+            <CartesianGrid vertical={false} stroke={VIZ.grid} />
+            <XAxis
+              dataKey="trial"
+              type="number"
+              domain={[0.5, points.length + 0.5]}
+              ticks={trialTicks(points.length)}
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={{ stroke: VIZ.axis }}
+              label={{ value: 'Trial', position: 'insideBottom', offset: -12, fill: VIZ.ink2, fontSize: 12 }}
+            />
+            <YAxis
+              domain={[yMin, yMax]}
+              ticks={yTicks}
+              tickFormatter={(v: number) => `${v}%`}
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              width={Y_AXIS_WIDTH}
+              label={{
+                value: '← clockwise   ·   counterclockwise →',
+                angle: -90,
+                position: 'insideLeft',
+                offset: 4,
+                style: { textAnchor: 'middle', fill: VIZ.ink2, fontSize: 12, whiteSpace: 'pre' },
+              }}
+            />
+            {/* A straight path to the target. */}
+            <ReferenceLine y={0} stroke={VIZ.muted} strokeWidth={1} />
+            <Tooltip
+              isAnimationActive={false}
+              cursor={{ stroke: VIZ.muted, strokeWidth: 1 }}
+              content={({ active, payload }) => {
+                const point: TrialPoint | undefined = active ? payload?.[0]?.payload?.point : undefined;
+                if (!point) return null;
+                const tooltipRows = [];
+                if (point.pathErrorPct !== null) {
+                  tooltipRows.push({
+                    value: formatSignedPct(point.pathErrorPct),
+                    label: point.cursorShown ? 'path error of the cursor' : 'path error (cursor hidden: your hand’s path)',
+                    color: point.isCatch ? VIZ.catchTrial : VIZ.move,
+                  });
+                }
+                tooltipRows.push({ value: formatSignedDeg(point.rotationDeg, 2), label: 'cursor rotation on this reach' });
+                const note =
+                  point.pathErrorPct !== null
+                    ? pathErrorWords(point.pathErrorPct)
+                    : !point.valid
+                      ? `No value: this reach ${point.invalidReason === 'timeout' ? 'timed out' : `was not analysed (${point.invalidReason})`}.`
+                      : 'No value for this reach.';
+                return <TooltipCard heading={`Trial ${point.trialNumber} · ${blockName(point, bands)}`} rows={tooltipRows} note={note} />;
+              }}
+            />
             <Line
               dataKey="value"
               type="linear"

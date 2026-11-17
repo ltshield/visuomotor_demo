@@ -1232,6 +1232,10 @@ legend,
   margin-bottom: 16px;
 }
 
+.class-measure {
+  margin-bottom: 14px;
+}
+
 .class-view-select select {
   font: inherit;
   padding: 6px 8px;

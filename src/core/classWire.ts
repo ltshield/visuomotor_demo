@@ -6,9 +6,10 @@
  * Functions) pulls it in, and it must not drag the rest of the app with it.
  *
  * WHAT IS SENT. A compact summary only: for each reach, its position, block,
- * catch flag, the rotation applied, and one number, the initial hand direction
- * error. No movement samples, no timings, no free-text answers, no browser or
- * device details. Nothing in it identifies a person or a computer.
+ * catch flag, the rotation applied, and two numbers, the initial hand
+ * direction error and the whole-path error of what the student saw. No
+ * movement samples, no timings, no free-text answers, no browser or device
+ * details. Nothing in it identifies a person or a computer.
  *
  * The server never trusts a submission: `parseSubmission` checks every field,
  * rejects anything out of range, and copies only the fields named here.
@@ -47,6 +48,12 @@ export interface WireTrial {
   rot: number;
   /** Initial hand direction error, degrees; null when the reach has no usable value. */
   err: number | null;
+  /**
+   * Whole-path error of the path the student saw (the cursor's, or the hand's
+   * on a hidden-cursor reach), in % of the target distance; null when there is
+   * no usable value. Optional on input: a submission without it is stored with null.
+   */
+  pe: number | null;
   valid: boolean;
 }
 
@@ -172,8 +179,12 @@ export function parseSubmission(body: unknown): ParseResult {
     if (err !== null && !(isFiniteNumber(err) && Math.abs(err) <= 180)) {
       return fail(`${at}.err`, 'err must be null or a number of degrees from -180 to 180.');
     }
+    const pe = raw.pe ?? null;
+    if (pe !== null && !(isFiniteNumber(pe) && Math.abs(pe) <= 200)) {
+      return fail(`${at}.pe`, 'pe must be null or a percentage from -200 to 200.');
+    }
     if (typeof raw.valid !== 'boolean') return fail(`${at}.valid`, 'valid must be true or false.');
-    trials.push({ i: raw.i, phase: raw.phase as WirePhase, catch: raw.catch, rot: raw.rot, err, valid: raw.valid });
+    trials.push({ i: raw.i, phase: raw.phase as WirePhase, catch: raw.catch, rot: raw.rot, err, pe, valid: raw.valid });
   }
 
   return {

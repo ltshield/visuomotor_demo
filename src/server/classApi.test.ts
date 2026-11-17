@@ -32,6 +32,8 @@ function submission(overrides: Partial<ClassSubmission> = {}, seed = 1): ClassSu
       catch: isCatch,
       rot: phase === 'adaptation' && !isCatch ? 45 : 0,
       err: Math.round((phase === 'baseline' ? 2 : -30 - seed) * 100 + i) / 100,
+      // The path error of reach 5 is left out, as an older client would.
+      pe: i === 5 ? null : Math.round((phase === 'adaptation' ? 20 - i / 4 : -8 - seed) * 100) / 100,
       valid: true,
     };
   });
@@ -121,6 +123,7 @@ describe('schema', () => {
       ['rotationApplied', 'REAL', 1, 0],
       ['initialDirErrorDeg', 'REAL', 0, 0],
       ['valid', 'INTEGER', 1, 0],
+      ['pathErrorPct', 'REAL', 0, 0],
     ]);
     expect(db.rows<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_sessions_class'")).toHaveLength(1);
   });
@@ -137,6 +140,25 @@ describe('schema', () => {
     await ensureSchema(db);
     await ensureSchema(db);
     expect(db.statementsRun).toBe(before);
+  });
+
+  it('adds the path-error column to a database created from the first schema, keeping its data', async () => {
+    const db = createTestD1();
+    // The schema as it was before path error existed, with one session already in it.
+    db.sqlite.exec(`CREATE TABLE sessions (id TEXT PRIMARY KEY, classCode TEXT NOT NULL, presetId TEXT NOT NULL,
+      rotationDeg INTEGER NOT NULL, trialTier TEXT NOT NULL, submittedAt TEXT NOT NULL, consciousAdjustment TEXT)`);
+    db.sqlite.exec(`CREATE TABLE trial_errors (sessionId TEXT NOT NULL, trialIndex INTEGER NOT NULL, phase TEXT NOT NULL,
+      isCatch INTEGER NOT NULL, rotationApplied REAL NOT NULL, initialDirErrorDeg REAL, valid INTEGER NOT NULL,
+      PRIMARY KEY (sessionId, trialIndex))`);
+    db.sqlite.exec(`INSERT INTO sessions VALUES ('old-session-0000000000', 'NEURO451', 'rotation-sudden-45-v2', 45, 'standard', '2026-11-01T00:00:00.000Z', NULL)`);
+    db.sqlite.exec(`INSERT INTO trial_errors VALUES ('old-session-0000000000', 0, 'baseline', 0, 0, 1.5, 1)`);
+
+    await submitOk(db, submission());
+    expect(db.rows<{ name: string }>('PRAGMA table_info(trial_errors)').map((c) => c.name)).toContain('pathErrorPct');
+    const data = await readClass(db, 'NEURO451');
+    expect(data.count).toBe(2);
+    const old = data.sessions.find((s) => s.trials.length === 1)!;
+    expect(old.trials[0]).toEqual({ i: 0, phase: 'baseline', catch: false, rot: 0, err: 1.5, pe: null, valid: true });
   });
 });
 
@@ -168,7 +190,10 @@ describe('POST /api/submit: stores correctly', () => {
       rotationApplied: 0,
       initialDirErrorDeg: 2,
       valid: 1,
+      pathErrorPct: -9,
     });
+    expect(trials[5]).toMatchObject({ trialIndex: 5, pathErrorPct: null });
+    expect(trials[20]).toMatchObject({ pathErrorPct: 15 });
     expect(trials[19]).toMatchObject({ trialIndex: 19, phase: 'adaptation', isCatch: 1, rotationApplied: 0, valid: 1 });
     expect(trials[20]).toMatchObject({ trialIndex: 20, phase: 'adaptation', isCatch: 0, rotationApplied: 45 });
     expect(trials[39]).toMatchObject({ trialIndex: 39, phase: 'aftereffect', rotationApplied: 0, initialDirErrorDeg: -30.61 });
@@ -181,6 +206,16 @@ describe('POST /api/submit: stores correctly', () => {
     await submitOk(db, s);
     expect(db.rows('SELECT initialDirErrorDeg, valid FROM trial_errors WHERE trialIndex = 4')).toEqual([{ initialDirErrorDeg: null, valid: 0 }]);
     expect(db.rows('SELECT consciousAdjustment FROM sessions')).toEqual([{ consciousAdjustment: null }]);
+  });
+
+  it('accepts reaches without a path error at all, storing NULL', async () => {
+    const db = createTestD1();
+    const s = submission() as unknown as { trials: Array<Record<string, unknown>> };
+    s.trials = s.trials.map(({ pe: _pe, ...rest }) => rest);
+    const res = await handleSubmit(post(s), { DB: db }, clock());
+    expect(res.status).toBe(200);
+    expect(db.rows('SELECT COUNT(*) AS n FROM trial_errors WHERE pathErrorPct IS NULL')).toEqual([{ n: 40 }]);
+    expect((await readClass(db, 'NEURO451')).sessions[0].trials[0].pe).toBeNull();
   });
 
   it('upper-cases the class code, so "neuro451" and "NEURO451" are one class', async () => {
@@ -391,6 +426,8 @@ describe('POST /api/submit: rejects malformed submissions with a structured erro
     await expectError(await send(withTrial(3, { rot: null })), 400, 'invalid_field', 'trials[3].rot');
     await expectError(await send(withTrial(3, { err: 'big' })), 400, 'invalid_field', 'trials[3].err');
     await expectError(await send(withTrial(3, { err: 999 })), 400, 'invalid_field', 'trials[3].err');
+    await expectError(await send(withTrial(3, { pe: 'wide' })), 400, 'invalid_field', 'trials[3].pe');
+    await expectError(await send(withTrial(3, { pe: 250 })), 400, 'invalid_field', 'trials[3].pe');
     await expectError(await send(withTrial(3, { valid: 1 })), 400, 'invalid_field', 'trials[3].valid');
     await expectError(await send(withTrial(3, { i: 2 })), 400, 'invalid_field', 'trials[3].i'); // repeats position 2
     await expectError(await send(withTrial(0, { i: -1 })), 400, 'invalid_field', 'trials[0].i');
@@ -460,7 +497,7 @@ describe('GET /api/class/<code>', () => {
     const body = (await res.json()) as ClassResponse;
     for (const s of body.sessions) {
       expect(Object.keys(s).sort()).toEqual(['consciousAdjustment', 'presetId', 'rotationDeg', 'trialTier', 'trials']);
-      for (const t of s.trials) expect(Object.keys(t).sort()).toEqual(['catch', 'err', 'i', 'phase', 'rot', 'valid']);
+      for (const t of s.trials) expect(Object.keys(t).sort()).toEqual(['catch', 'err', 'i', 'pe', 'phase', 'rot', 'valid']);
     }
   });
 

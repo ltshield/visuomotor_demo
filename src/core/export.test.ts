@@ -76,7 +76,7 @@ describe('session JSON', () => {
   const parsed = JSON.parse(text) as SessionRecord;
 
   it('is valid JSON containing the whole session', () => {
-    expect(parsed.schemaVersion).toBe('2.0.0');
+    expect(parsed.schemaVersion).toBe('2.1.0');
     expect(parsed.sessionId).toBe('export-test');
     expect(parsed.preset).toEqual(session.preset);
     expect(parsed.assignment).toEqual(session.assignment);

@@ -12,9 +12,9 @@
 
 import { perturbedReachCount } from '../../core/presets';
 import type { SessionRecord } from '../../core/record';
-import { catchTrialNumbers, describePerturbation } from '../presetText';
+import { catchTrialNumbers, describePerturbation, formatSignedDeg } from '../presetText';
 import { ADJUSTMENT_CHOICES, ADJUSTMENT_QUESTION } from '../Reflection';
-import type { PhaseBand } from './model';
+import { aimAndArrival, describeDirection, type PhaseBand } from './model';
 
 const span = (band: PhaseBand | undefined) => (band ? `trials ${band.firstTrial}–${band.lastTrial}` : '');
 
@@ -33,6 +33,11 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
   const aftereffectHidden = preset.structure.aftereffect.feedback === 'hidden';
   const adjustment = session.reflection?.consciousAdjustment ?? null;
   const adjustmentLabel = ADJUSTMENT_CHOICES.find((c) => c.value === adjustment)?.label ?? null;
+  const fullRotation = Math.abs(preset.perturbation.kind === 'sudden' ? preset.perturbation.angleDeg : preset.perturbation.endDeg);
+  // Set-off versus arrival direction on the last rotated reaches (only when the rotation was on).
+  const lateTrials = session.summary.latePerturbed.trialNumbers;
+  const lateValues = aimAndArrival(session, lateTrials);
+  const steering = lateValues && lateValues.rotationDeg !== 0 ? lateValues : null;
 
   return (
     <section className="card debrief">
@@ -75,8 +80,20 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
       <ul className="plain-list">
         <li>
           <strong>Adaptation</strong> would appear in the rotation block as your hand’s initial direction moving away
-          from 0° toward the gray reference line (−45° while the rotation was at full size).
+          from 0° toward the gray reference line ({formatSignedDeg(-fullRotation, 0)} while the rotation was at full
+          size), and as the cursor’s path error shrinking back toward 0%.
         </li>
+        {steering && (
+          <li data-testid="aim-vs-steering">
+            <strong>Aiming versus steering.</strong> On your last rotated reaches ({listTrials(lateTrials)}), your hand
+            set off on average {describeDirection(steering.initialDeg)} of the target, and by the time it reached the
+            target’s distance it was {describeDirection(steering.arrivalDeg)} of it ({formatSignedDeg(-steering.rotationDeg, 0)}{' '}
+            would have cancelled the rotation exactly).{' '}
+            {Math.abs(steering.arrivalDeg - steering.initialDeg) >= 5
+              ? 'The difference is steering: correcting the cursor while you moved. The initial direction shows only the change in your aim; the path error shows aim and steering together.'
+              : 'Your hand arrived about where it set off, so any correction was in your aim rather than made during the reach.'}
+          </li>
+        )}
         <li>
           <strong>An aftereffect</strong> would appear as {catches.length > 0 ? 'catch-trial and ' : ''}
           aftereffect-block points lying clockwise of your baseline points, even though the rotation was 0° on those

@@ -45,6 +45,7 @@ Computed separately for the **hand** path and, when the cursor was visible, for 
 | **Maximum absolute lateral deviation** (wu) | Largest distance of the path from the straight start→target line. |
 | **Signed lateral deviation at maximum** (wu) | The signed value at that point; its sign tells which side. |
 | **Mean absolute lateral deviation** (wu) | Mean of \|lateral deviation\| along the path, weighted by path length (trapezoid rule per segment). Being length-weighted, it describes the path's shape and is not affected by pauses or by the mouse's report rate. |
+| **Mean signed lateral deviation** (wu) | The same average **keeping the sign** (`meanSignedLateralDeviation`, schema 2.1). This is the *whole-path error*: how far, on average along its length, the path ran to one side of the straight line. Deviations on opposite sides cancel, so an S-shaped path scores near 0 while its absolute mean does not. A straight path at angle *e* to the target line, out to radius *R*, scores R·sin(*e*)/2. |
 | **Path length** (wu) | Sum of the distances between successive path points, start to crossing. |
 | **Path efficiency** | Straight-line distance from start to crossing ÷ path length. 1 = perfectly straight. |
 
@@ -89,6 +90,21 @@ Descriptive statistics of **one participant's own** initial hand direction error
 | All aftereffect reaches | 33–40 |
 
 Each row gives the mean over the trials that have a valid value, how many did, and the mean rotation applied. "Relative to your baseline" is the row's value minus the baseline mean. These are not inferential statistics, and no data from other people is shown anywhere in the app.
+
+## Path error (whole-path error of what the participant saw)
+
+The results page, the summary table and the class view also show a **path error** for every reach: the **cursor's** mean signed lateral deviation, as a **percentage of D**. On reaches made with the cursor hidden (baseline, and the aftereffect block when hidden) the rotation was 0°, so the cursor would have followed the hand exactly, and the hand's value is used.
+
+Why the cursor and not the hand: once someone has adapted, their **hand** path is meant to run off to the side of the straight line to the target (that is what cancels the rotation). A hand-path "error" would score good adaptation as a large error. The cursor path is the error the participant experienced.
+
+How it differs from the initial direction error:
+
+- The **initial direction** is measured a quarter of the way out, before most corrections can act: it shows the participant's *aim*.
+- The **path error** covers the whole outward reach, so it also includes **steering** during the movement.
+
+Someone who keeps aiming at the target but steers the cursor back mid-reach shows a shrinking path error with little change in initial direction. Slow movements leave a lot of time for steering, so in slow movers the two measures can tell quite different stories. The debrief compares the hand's direction at the start and at arrival on the last rotated reaches to make this visible to the participant.
+
+Expected shape: about 0% in baseline; a jump in the rotation direction (positive for a +45° rotation) when the rotation appears; a decline as the participant compensates; and negative values on catch trials and in the aftereffect block if compensation carries over.
 
 ## Target-aligned plots
 

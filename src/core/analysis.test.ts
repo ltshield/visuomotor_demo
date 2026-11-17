@@ -155,7 +155,38 @@ describe('straight-reach reference values', () => {
     expect(m.hand!.meanAbsLateralDeviation).toBeCloseTo((R * sinDeg(30)) / 2, 4);
     expect(m.hand!.pathEfficiency).toBeCloseTo(1, 6); // straight, just aimed elsewhere
   });
+});
 
+describe('whole-path error (mean signed lateral deviation)', () => {
+  it('is zero for a straight reach to the target', () => {
+    expect(metricsOf(recordReach({ targetAngleDeg: 225 }, 225)).hand!.meanSignedLateralDeviation).toBeCloseTo(0, 6);
+  });
+
+  it('keeps the side: half the final deviation for a straight misdirected reach, signed', () => {
+    const ccw = metricsOf(recordReach({ targetAngleDeg: 90 }, 120)).hand!;
+    expect(ccw.meanSignedLateralDeviation).toBeCloseTo((R * sinDeg(30)) / 2, 4);
+    const cw = metricsOf(recordReach({ targetAngleDeg: 90 }, 60)).hand!;
+    expect(cw.meanSignedLateralDeviation).toBeCloseTo(-(R * sinDeg(30)) / 2, 4);
+  });
+
+  it('counts a corrected reach that stayed on one side in full', () => {
+    const bend = targetPosition(30, 100);
+    const curved: Path = { x: [0, bend.x, D], y: [0, bend.y, 0], tMs: [0, 100, 300] };
+    const m = computePathMetrics(curved, 0, geometry, criteria)!;
+    expect(m.meanSignedLateralDeviation).toBeGreaterThan(0);
+    expect(m.meanSignedLateralDeviation).toBeCloseTo(m.meanAbsLateralDeviation, 6);
+  });
+
+  it('lets deviations on opposite sides cancel, unlike the absolute mean', () => {
+    // An S: 20 units to the left over the first half, 20 to the right over the second.
+    const s: Path = { x: [0, 60, 120, 180, D], y: [0, 20, 0, -20, 0], tMs: [0, 50, 100, 150, 200] };
+    const m = computePathMetrics(s, 0, geometry, criteria)!;
+    expect(m.meanSignedLateralDeviation).toBeCloseTo(0, 6);
+    expect(m.meanAbsLateralDeviation).toBeGreaterThan(5);
+  });
+});
+
+describe('timing reference values', () => {
   it('reaction time and movement duration come from onset and arrival times', () => {
     const r = recordReach({}, 0, { distance: D * 1.04, durationMs: 300 });
     const m = metricsOf(r);

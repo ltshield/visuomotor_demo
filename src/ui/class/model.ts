@@ -14,14 +14,28 @@
  * STATISTICS. Everything here is descriptive: a mean and a sample standard
  * deviation over whoever chose to share. Nothing is tested or compared.
  *
- * Key exports: `buildClassModel`, `chartRows`, `meanSd`, and their types.
+ * Key exports: `buildClassModel`, `chartRows`, `meanSd`, `valueOf`, and their types.
  */
 
-import type { ClassSession, WirePhase } from '../../core/classWire';
+import type { ClassSession, WirePhase, WireTrial } from '../../core/classWire';
 import { GRADUAL_45_V2, SUDDEN_45_V2 } from '../../core/presets';
 
 /** Most individual lines drawn per series; the mean and band always use every session. */
 export const MAX_LINES_PER_SERIES = 60;
+
+/**
+ * Which number per reach the view shows:
+ *   pe   whole-path error of the path the student saw, % of the target distance
+ *   err  initial hand direction error, degrees
+ */
+export type ClassMetric = 'pe' | 'err';
+
+/** A reach's value for the chosen measure, or null when it has none. */
+export function valueOf(t: WireTrial, metric: ClassMetric): number | null {
+  if (!t.valid) return null;
+  const v = metric === 'pe' ? t.pe : t.err;
+  return typeof v === 'number' ? v : null;
+}
 
 export interface MeanSd {
   /** Values that went into the mean. */
@@ -50,7 +64,7 @@ export interface ClassSeries {
   /** Position in the fixed colour order (0 = first series colour). */
   colorIndex: number;
   sessions: ClassSession[];
-  /** One entry per trial (index 0 = trial 1): mean ± SD of the initial direction error across sessions. */
+  /** One entry per trial (index 0 = trial 1): mean ± SD of the chosen measure across sessions. */
   perTrial: MeanSd[];
   /** Across sessions: each session's mean error over its valid catch trials. */
   catchError: MeanSd;
@@ -70,6 +84,8 @@ export interface ClassBand {
 /** A selectable view: a set of series that share one protocol structure and may be drawn together. */
 export interface ClassViewModel {
   key: string;
+  /** The measure every number in the view is in. */
+  metric: ClassMetric;
   label: string;
   /** True for the standard sudden-versus-gradual view. */
   standard: boolean;
@@ -96,18 +112,30 @@ const PHASE_LABELS: Record<WirePhase, string> = {
   aftereffect: 'Aftereffect block',
 };
 
-const validErrors = (session: ClassSession, keep: (t: ClassSession['trials'][number]) => boolean): number[] =>
-  session.trials.filter((t) => keep(t) && t.valid && t.err !== null).map((t) => t.err as number);
+const validValues = (session: ClassSession, metric: ClassMetric, keep: (t: WireTrial) => boolean): number[] =>
+  session.trials
+    .filter(keep)
+    .map((t) => valueOf(t, metric))
+    .filter((v): v is number => v !== null);
 
 const meanOf = (values: number[]): number | null => (values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null);
 
-function buildSeries(key: string, presetId: string, label: string, colorIndex: number, sessions: ClassSession[], trialCount: number): ClassSeries {
+function buildSeries(
+  key: string,
+  presetId: string,
+  label: string,
+  colorIndex: number,
+  sessions: ClassSession[],
+  trialCount: number,
+  metric: ClassMetric,
+): ClassSeries {
   const perTrial: MeanSd[] = [];
   for (let i = 0; i < trialCount; i++) {
     const values: number[] = [];
     for (const s of sessions) {
       const t = s.trials.find((x) => x.i === i);
-      if (t && t.valid && t.err !== null) values.push(t.err);
+      const v = t ? valueOf(t, metric) : null;
+      if (v !== null) values.push(v);
     }
     perTrial.push(meanSd(values));
   }
@@ -123,12 +151,12 @@ function buildSeries(key: string, presetId: string, label: string, colorIndex: n
     colorIndex,
     sessions,
     perTrial,
-    catchError: perSession((s) => meanOf(validErrors(s, (t) => t.catch))),
+    catchError: perSession((s) => meanOf(validValues(s, metric, (t) => t.catch))),
     firstAftereffect: perSession((s) => {
       const first = s.trials.find((t) => t.phase === 'aftereffect');
-      return first && first.valid && first.err !== null ? first.err : null;
+      return first ? valueOf(first, metric) : null;
     }),
-    baseline: perSession((s) => meanOf(validErrors(s, (t) => t.phase === 'baseline'))),
+    baseline: perSession((s) => meanOf(validValues(s, metric, (t) => t.phase === 'baseline'))),
   };
 }
 
@@ -148,8 +176,8 @@ function layoutOf(sessions: ClassSession[]): { trialCount: number; catchTrials: 
   return { trialCount, catchTrials: reference.trials.filter((t) => t.catch).map((t) => t.i + 1), bands };
 }
 
-/** Group a class's sessions into views. Pure. */
-export function buildClassModel(sessions: readonly ClassSession[]): ClassModel {
+/** Group a class's sessions into views, in the chosen measure. Pure. */
+export function buildClassModel(sessions: readonly ClassSession[], metric: ClassMetric = 'err'): ClassModel {
   const byPreset = new Map<string, ClassSession[]>();
   for (const s of sessions) {
     const list = byPreset.get(s.presetId) ?? [];
@@ -164,11 +192,12 @@ export function buildClassModel(sessions: readonly ClassSession[]): ClassModel {
   const standardTrials = standardLayout.trialCount || 40;
   const standard: ClassViewModel = {
     key: 'standard',
+    metric,
     label: 'Standard versions: sudden and gradual',
     standard: true,
     series: [
-      buildSeries('sudden', SUDDEN_45_V2.id, 'Sudden 45°', 0, sudden, standardTrials),
-      buildSeries('gradual', GRADUAL_45_V2.id, 'Gradual 0°→45°', 1, gradual, standardTrials),
+      buildSeries('sudden', SUDDEN_45_V2.id, 'Sudden 45°', 0, sudden, standardTrials, metric),
+      buildSeries('gradual', GRADUAL_45_V2.id, 'Gradual 0°→45°', 1, gradual, standardTrials, metric),
     ],
     trialCount: standardTrials,
     catchTrials: standardLayout.trialCount > 0 ? standardLayout.catchTrials : [20, 28],
@@ -190,10 +219,11 @@ export function buildClassModel(sessions: readonly ClassSession[]): ClassModel {
       const layout = layoutOf(list);
       return {
         key: presetId,
+        metric,
         label: presetId,
         standard: false,
         // Always the first series colour: there is only one series in such a view.
-        series: [buildSeries('only', presetId, presetId, 0, list, layout.trialCount)],
+        series: [buildSeries('only', presetId, presetId, 0, list, layout.trialCount, metric)],
         trialCount: layout.trialCount,
         catchTrials: layout.catchTrials,
         bands: layout.bands,
@@ -223,7 +253,7 @@ export function chartRows(view: ClassViewModel): Array<Record<string, number | n
         stats.mean !== null && stats.sd !== null ? [stats.mean - stats.sd, stats.mean + stats.sd] : null;
       series.sessions.slice(0, MAX_LINES_PER_SERIES).forEach((session, k) => {
         const t = session.trials.find((x) => x.i === i);
-        row[`${series.key}_${k}`] = t && t.valid && t.err !== null ? t.err : null;
+        row[`${series.key}_${k}`] = t ? valueOf(t, view.metric) : null;
       });
     }
     rows.push(row);

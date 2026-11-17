@@ -566,9 +566,9 @@ export function Instructor() {
             </li>
             <li>
               <strong>Class sharing is opt-in.</strong> A student who types a class code and presses Share
-              anonymously sends a compact summary: for each reach its block, catch flag, the rotation applied and one
-              number (the initial direction error), plus which version they did and their answer to the question about
-              adjusting their aim. No name, no movement traces, no free-text answers and no browser or device details
+              anonymously sends a compact summary: for each reach its block, catch flag, the rotation applied and two
+              numbers (the initial direction error and the path error of the cursor), plus which version they did and
+              their answer to the question about adjusting their aim. No name, no movement traces, no free-text answers and no browser or device details
               are sent, and the class view cannot show which line belongs to whom.
             </li>
             <li>

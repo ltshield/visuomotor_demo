@@ -23,6 +23,13 @@ export function formatSignedDeg(value: number, digits = 1): string {
   return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded)}°`;
 }
 
+/** A signed percentage, e.g. +22%, −8.5%; 0 → "0%". */
+export function formatSignedPct(value: number, digits = 1): string {
+  const rounded = Number(value.toFixed(digits));
+  if (rounded === 0) return '0%';
+  return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded)}%`;
+}
+
 /** Rotation applied on each non-catch adaptation reach, in order (reach 1 first). */
 export function perturbedAngles(preset: PresetConfig): number[] {
   const n = perturbedReachCount(preset.structure);

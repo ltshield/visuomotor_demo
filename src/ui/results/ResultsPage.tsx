@@ -43,7 +43,7 @@ import {
 import { PathPanels } from './PathPanels';
 import { ShareWithClass } from './ShareWithClass';
 import { SummaryTable, TrialTable } from './Tables';
-import { DirectionErrorChart, RotationTimeline } from './TrialCharts';
+import { DirectionErrorChart, PathErrorChart, RotationTimeline } from './TrialCharts';
 import { TrialInspector } from './TrialInspector';
 
 const ASSIGNMENT_TEXT: Record<SessionRecord['assignment']['method'], string> = {
@@ -191,6 +191,7 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
       <h2>1. What was changed, and what you did</h2>
       <RotationTimeline points={points} bands={bands} />
       <DirectionErrorChart points={points} bands={bands} kind={kind} onSelectTrial={inspect} />
+      <PathErrorChart points={points} bands={bands} onSelectTrial={inspect} />
 
       <h2>2. Your numbers</h2>
       <section className="card">

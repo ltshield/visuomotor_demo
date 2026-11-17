@@ -87,7 +87,7 @@ describe('share with the class', () => {
     const preview = JSON.parse(screen.getByTestId('share-preview').textContent ?? '');
     expect(preview.classCode).toBe('(the code you enter)');
     expect(preview.trials).toHaveLength(session.schedule.length);
-    expect(Object.keys(preview.trials[0]).sort()).toEqual(['catch', 'err', 'i', 'phase', 'rot', 'valid']);
+    expect(Object.keys(preview.trials[0]).sort()).toEqual(['catch', 'err', 'i', 'pe', 'phase', 'rot', 'valid']);
   });
 
   it('does not offer to share a second run', () => {

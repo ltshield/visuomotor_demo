@@ -52,6 +52,30 @@ export const METRIC_INFO = {
       </>
     ),
   },
+  pathError: {
+    term: 'Path error',
+    text: (
+      <>
+        How far the cursor’s whole outward path ran to the side of the straight line from the start to the target,
+        averaged along the path, as a percentage of the distance to the target. 0% is a straight path to the target;
+        positive is counterclockwise, negative clockwise. Unlike the initial direction, it includes any steering you
+        did during the reach, so it is the error you actually saw. Where the cursor was hidden there was no rotation,
+        so your hand’s path is used.
+      </>
+    ),
+  },
+  aimVersusSteering: {
+    term: 'Aiming versus steering',
+    text: (
+      <>
+        There are two ways to get the cursor to the target despite a rotation: aim differently from the start, or set
+        off as usual and steer the cursor back while you move. The initial direction shows the first; the path error
+        shows both together. If your path error shrank during the rotation block while your initial direction hardly
+        changed, you were mostly steering. Slow movements leave plenty of time to steer; quick, smooth ones leave
+        little, so they show changes in aim more clearly.
+      </>
+    ),
+  },
   pathEfficiency: {
     term: 'Path efficiency',
     text: (

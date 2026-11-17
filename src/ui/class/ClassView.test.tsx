@@ -4,7 +4,7 @@
  * checked in a real browser; here we check what the page says, how it polls,
  * and that a failed refresh never wipes what is already on screen.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClassResponse, ClassSession } from '../../core/classWire';
 import { GRADUAL_45_V2, SUDDEN_45_V2 } from '../../core/presets';
@@ -16,6 +16,7 @@ afterEach(cleanup);
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 
+/** A session with initial direction error `value` (degrees) and path error `value / 2` (%) on every reach. */
 function session(presetId: string, value: number): ClassSession {
   return {
     presetId,
@@ -28,6 +29,7 @@ function session(presetId: string, value: number): ClassSession {
       catch: i === 19 || i === 27,
       rot: 0,
       err: value,
+      pe: value / 2,
       valid: true,
     })),
   };
@@ -68,11 +70,27 @@ describe('class view', () => {
     await waitFor(() => expect(screen.getByTestId('class-total').textContent).toBe('3'));
     expect(screen.getByTestId('class-count-sudden').textContent).toBe('2');
     expect(screen.getByTestId('class-count-gradual').textContent).toBe('1');
-    expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−25° ± 7.1°');
+    // Path error is shown first.
+    expect(screen.getByTestId('class-chart-title').textContent).toMatch(/^Path error on every trial/);
+    expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−12.5% ± 3.5%');
     expect(screen.getByTestId('class-catch-sudden').textContent).toContain('n = 2');
-    expect(screen.getByTestId('class-aftereffect-gradual').textContent).toContain('−10°');
+    expect(screen.getByTestId('class-aftereffect-gradual').textContent).toContain('−5%');
     expect(screen.queryByTestId('class-empty')).toBeNull();
     expect(document.body.textContent).toContain('Descriptive only');
+  });
+
+  it('switches every number to the initial direction, and back', async () => {
+    const fetchImpl = server(() => json(response([session(SUDDEN_45_V2.id, -20), session(SUDDEN_45_V2.id, -30)])));
+    render(<ClassView code="NEURO451" fetchImpl={fetchImpl} pollMs={60_000} />);
+    await waitFor(() => expect(screen.getByTestId('class-total').textContent).toBe('2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Initial direction' }));
+    expect(screen.getByRole('button', { name: 'Initial direction' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('class-chart-title').textContent).toBe('Initial direction error on every trial');
+    expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−25° ± 7.1°');
+    fireEvent.click(screen.getByRole('button', { name: 'Path error' }));
+    expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−12.5% ± 3.5%');
+    // Switching is local: it does not ask the server again.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('polls with the version it holds, and keeps the data when the server says nothing changed', async () => {
@@ -119,6 +137,6 @@ describe('class view', () => {
     await waitFor(() => expect(screen.getByLabelText('Protocol shown')).toBeTruthy());
     const options = [...(screen.getByLabelText('Protocol shown') as HTMLSelectElement).options].map((o) => o.textContent);
     expect(options).toEqual(['Standard versions: sudden and gradual (1)', 'rotation-sudden-30-custom-v2 (1)']);
-    expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−20°');
+    expect(screen.getByTestId('class-catch-sudden').textContent).toContain('−10%');
   });
 });

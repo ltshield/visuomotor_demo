@@ -211,7 +211,9 @@ describe('metric explanations', () => {
     expect(text()).toContain('your hand error matched what it would take to cancel the rotation');
     expect(text()).toContain('the rotation was secretly removed for a single reach');
     expect(text()).toContain('It is not a measure of learning');
-    expect(Object.keys(METRIC_INFO)).toHaveLength(5);
+    expect(text()).toContain('so it is the error you actually saw');
+    expect(text()).toContain('If your path error shrank during the rotation block while your initial direction hardly changed');
+    expect(Object.keys(METRIC_INFO)).toHaveLength(7);
   });
 
   it('leaves out the catch-trial note when the session has no catch trials', () => {
@@ -576,5 +578,36 @@ describe('downloads and next steps', () => {
     expect(text()).toContain('carry-over can change what happens');
     fireEvent.click(screen.getByRole('button', { name: 'Try the other version' }));
     expect(onTryOther).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('whole-path error', () => {
+  it('draws the path-error chart under the direction chart, always for the cursor', () => {
+    const { text } = renderResults(sudden);
+    expect(document.getElementById('path-error-chart')).not.toBeNull();
+    expect(text()).toContain('What you saw: how far the cursor’s whole path strayed from the straight line');
+    // It does not follow the hand / cursor switch.
+    fireEvent.click(screen.getByRole('button', { name: 'The cursor as displayed' }));
+    expect(document.getElementById('path-error-chart')).not.toBeNull();
+    expect(text()).toContain('This chart always shows the cursor');
+  });
+
+  it('adds path error to the summary and to the per-reach table', () => {
+    renderResults(sudden);
+    const summary = document.querySelector('.summary-table') as HTMLElement;
+    expect(within(summary).getByRole('columnheader', { name: 'Path error (mean)' })).toBeTruthy();
+    expect(summary.textContent).toMatch(/[+−]\d+(\.\d)?%/);
+    const trialTable = document.querySelector('.trial-table') as HTMLElement;
+    expect(within(trialTable).getByRole('columnheader', { name: 'Path error (cursor)' })).toBeTruthy();
+  });
+
+  it('contrasts where the hand set off with where it arrived on the last rotated reaches', () => {
+    renderResults(sudden);
+    const bullet = screen.getByTestId('aim-vs-steering').textContent ?? '';
+    expect(bullet).toContain('set off on average 35° clockwise of the target');
+    expect(bullet).toContain('it was 35° clockwise of it');
+    expect(bullet).toContain('−45° would have cancelled the rotation exactly');
+    // The scripted reaches are straight, so there was no steering to speak of.
+    expect(bullet).toContain('Your hand arrived about where it set off');
   });
 });

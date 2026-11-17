@@ -38,7 +38,7 @@ import {
   type WirePhase,
   type WireTier,
 } from '../core/classWire';
-import { SCHEMA_STATEMENTS } from './schema';
+import { ADDED_COLUMNS, SCHEMA_STATEMENTS } from './schema';
 
 // ---------------------------------------------------------------------------
 // The slice of the Cloudflare D1 API this file uses
@@ -98,6 +98,17 @@ export function methodNotAllowed(allowed: string): Response {
 // Schema
 // ---------------------------------------------------------------------------
 
+/** Add any column a database created from an older schema lacks (see ADDED_COLUMNS). */
+async function addMissingColumns(db: D1DatabaseLike): Promise<void> {
+  for (const { table, column, type } of ADDED_COLUMNS) {
+    // Table and column names come from our own constant, never from a request.
+    const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    if (!(info.results ?? []).some((c) => c.name === column)) {
+      await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+    }
+  }
+}
+
 /** Databases whose tables are known to exist, so the check runs once per database per server instance. */
 const schemaReady = new WeakMap<D1DatabaseLike, Promise<void>>();
 
@@ -109,7 +120,9 @@ const schemaReady = new WeakMap<D1DatabaseLike, Promise<void>>();
 export function ensureSchema(db: D1DatabaseLike): Promise<void> {
   let ready = schemaReady.get(db);
   if (!ready) {
-    ready = db.batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql))).then(() => undefined);
+    ready = db
+      .batch(SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
+      .then(() => addMissingColumns(db));
     schemaReady.set(db, ready);
     // If it failed, forget it so the next request tries again.
     ready.catch(() => schemaReady.delete(db));
@@ -174,7 +187,7 @@ export async function handleSubmit(request: Request, env: Env, now: () => Date =
     // Flags are sent as 0/1 so the stored values do not depend on how a JSON
     // true/false would be converted.
     const rows = JSON.stringify(
-      s.trials.map((t) => ({ i: t.i, p: t.phase, c: t.catch ? 1 : 0, r: t.rot, e: t.err, v: t.valid ? 1 : 0 })),
+      s.trials.map((t) => ({ i: t.i, p: t.phase, c: t.catch ? 1 : 0, r: t.rot, e: t.err, pe: t.pe, v: t.valid ? 1 : 0 })),
     );
 
     // One transaction: remove any earlier copy of this session, then store the new one.
@@ -189,9 +202,10 @@ export async function handleSubmit(request: Request, env: Env, now: () => Date =
       db
         .prepare(
           // Two parameters, in order of appearance: the session id, then the JSON array of reaches.
-          `INSERT INTO trial_errors (sessionId, trialIndex, phase, isCatch, rotationApplied, initialDirErrorDeg, valid)
+          `INSERT INTO trial_errors (sessionId, trialIndex, phase, isCatch, rotationApplied, initialDirErrorDeg, valid, pathErrorPct)
            SELECT ?, json_extract(value, '$.i'), json_extract(value, '$.p'), json_extract(value, '$.c'),
-                  json_extract(value, '$.r'), json_extract(value, '$.e'), json_extract(value, '$.v')
+                  json_extract(value, '$.r'), json_extract(value, '$.e'), json_extract(value, '$.v'),
+                  json_extract(value, '$.pe')
            FROM json_each(?)`,
         )
         .bind(s.sessionId, rows),
@@ -229,6 +243,7 @@ interface TrialRow {
   rotationApplied: number;
   initialDirErrorDeg: number | null;
   valid: number;
+  pathErrorPct: number | null;
 }
 
 /**
@@ -278,7 +293,7 @@ export async function handleClassGet(request: Request, env: Env, rawCode: string
       .all<SessionRow>();
     const trialRows = await db
       .prepare(
-        `SELECT t.sessionId, t.trialIndex, t.phase, t.isCatch, t.rotationApplied, t.initialDirErrorDeg, t.valid
+        `SELECT t.sessionId, t.trialIndex, t.phase, t.isCatch, t.rotationApplied, t.initialDirErrorDeg, t.valid, t.pathErrorPct
          FROM trial_errors t JOIN sessions s ON s.id = t.sessionId
          WHERE s.classCode = ?
          ORDER BY t.sessionId, t.trialIndex`,
@@ -305,6 +320,7 @@ export async function handleClassGet(request: Request, env: Env, rawCode: string
         catch: Number(row.isCatch) === 1,
         rot: Number(row.rotationApplied),
         err: row.initialDirErrorDeg === null ? null : Number(row.initialDirErrorDeg),
+        pe: row.pathErrorPct === null || row.pathErrorPct === undefined ? null : Number(row.pathErrorPct),
         valid: Number(row.valid) === 1,
       });
     }

@@ -7,14 +7,14 @@
  * Every function here uses only the FINAL attempt of each trial, and reads the
  * same metrics that are written to the downloadable files.
  *
- * Key exports: `phaseBands`, `trialPoints`, `pathPanels`, `catchComparisons`,
- * `catchCallout`, `groupAverages`, `normalizedPath`, `resampleByProgress`,
- * and their types.
+ * Key exports: `phaseBands`, `trialPoints`, `seenPathError`, `pathPanels`,
+ * `catchComparisons`, `catchCallout`, `groupAverages`, `normalizedPath`,
+ * `resampleByProgress`, and their types.
  */
 
 import { alignPath, catchNeighbours, groupTrials, outwardPath } from '../../core/analysis';
 import type { PhaseName } from '../../core/presets';
-import { finalAttempts, reachDataOf, type SessionRecord, type TrialExport } from '../../core/record';
+import { finalAttempts, reachDataOf, seenPathErrorPct, type SessionRecord, type TrialExport } from '../../core/record';
 import { formatSignedDeg } from '../presetText';
 
 /** Which path a chart shows: the hand (mouse) or the cursor as it was displayed. */
@@ -78,9 +78,15 @@ export interface TrialPoint {
    * target on this trial: the opposite of the applied rotation.
    */
   compensationDeg: number;
+  /** Whole-path error of the path the participant saw, in % of the target distance (see `seenPathError`). */
+  pathErrorPct: number | null;
 }
 
+/** The whole-path error of the path the participant saw (% of the target distance); see core/record.ts. */
+export const seenPathError = seenPathErrorPct;
+
 export function trialPoints(session: SessionRecord): TrialPoint[] {
+  const D = session.preset.geometry.targetDistance;
   return finalAttempts(session).map((t) => ({
     trialNumber: t.trialNumber,
     phase: t.phase,
@@ -96,6 +102,7 @@ export function trialPoints(session: SessionRecord): TrialPoint[] {
     cursorEndpointDeg: t.metrics.cursor?.endpointDirectionErrorDeg ?? null,
     // `0 - x` rather than `-x` so a zero rotation gives 0, not −0.
     compensationDeg: 0 - t.appliedRotationDeg,
+    pathErrorPct: seenPathError(t, D),
   }));
 }
 
@@ -471,6 +478,8 @@ export interface GroupAverages {
   pathEfficiency: number | null;
   /** Mean movement time, onset → arrival, over the group's valid reaches (ms); null if none. */
   movementTimeMs: number | null;
+  /** Mean whole-path error of the seen path (% of the target distance, see `seenPathError`); null if none. */
+  pathErrorPct: number | null;
 }
 
 /** Means of the two secondary metrics over the given trials (final attempts with valid metrics only). */
@@ -484,6 +493,40 @@ export function groupAverages(session: SessionRecord, trialNumbers: readonly num
   return {
     pathEfficiency: mean(trials.map((t) => t.metrics.hand?.pathEfficiency)),
     movementTimeMs: mean(trials.map((t) => t.metrics.movementDurationMs)),
+    pathErrorPct: mean(trials.map((t) => seenPathError(t, session.preset.geometry.targetDistance))),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Aiming versus steering
+// ---------------------------------------------------------------------------
+
+export interface AimAndArrival {
+  /** Valid reaches averaged. */
+  n: number;
+  /** Mean initial hand direction (deg): where the hand set off. */
+  initialDeg: number;
+  /** Mean hand direction on arrival (deg): where it had got to by the target's distance. */
+  arrivalDeg: number;
+  /** Mean rotation on those reaches (deg); −rotation would cancel it exactly. */
+  rotationDeg: number;
+}
+
+/**
+ * Where the hand set off versus where it arrived, averaged over the given
+ * reaches (valid final attempts only). The difference is correction made
+ * during the reach. Null when none of the reaches has both values.
+ */
+export function aimAndArrival(session: SessionRecord, trialNumbers: readonly number[]): AimAndArrival | null {
+  const wanted = new Set(trialNumbers);
+  const trials = finalAttempts(session).filter((t) => wanted.has(t.trialNumber) && t.valid && t.metrics.hand);
+  if (trials.length === 0) return null;
+  const mean = (pick: (t: TrialExport) => number) => trials.reduce((a, t) => a + pick(t), 0) / trials.length;
+  return {
+    n: trials.length,
+    initialDeg: mean((t) => t.metrics.hand!.initialDirectionErrorDeg),
+    arrivalDeg: mean((t) => t.metrics.hand!.endpointDirectionErrorDeg),
+    rotationDeg: mean((t) => t.appliedRotationDeg),
   };
 }
 
