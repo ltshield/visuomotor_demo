@@ -133,7 +133,7 @@ export function TrialInspector({ session, trialNumber, onChange }: TrialInspecto
         ? `${m.hand.maxAbsLateralDeviation.toFixed(0)} units ${m.hand.signedLateralDeviationAtMax < 0 ? 'clockwise' : 'counterclockwise'} of the straight line`
         : null,
     ],
-    ['Hand path straightness', m.hand ? `${m.hand.pathEfficiency.toFixed(3)} (1 = perfectly straight)` : null],
+    ['Hand path efficiency', m.hand ? `${m.hand.pathEfficiency.toFixed(3)} (1 = perfectly straight)` : null],
     ['Mouse samples in the outward reach', String(m.reachSampleCount)],
   ];
 

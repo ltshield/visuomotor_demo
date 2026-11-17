@@ -67,8 +67,16 @@ describe('buildSessionRecord: session-level fields', () => {
 
   it('starts with no reflection and can have one attached', () => {
     expect(session.reflection).toBeNull();
-    const answered = withReflection(session, { skipped: false, noticed: 'It drifted.', changedAim: 'yes', device: 'mouse' });
-    expect(answered.reflection).toEqual({ skipped: false, noticed: 'It drifted.', changedAim: 'yes', device: 'mouse' });
+    const answers = {
+      skipped: false,
+      noticed: 'It drifted.',
+      consciousAdjustment: 'yes' as const,
+      changedAim: null,
+      device: 'mouse' as const,
+    };
+    const answered = withReflection(session, answers);
+    expect(answered.reflection).toEqual(answers);
+    expect(answered.reflection!.consciousAdjustment).toBe('yes');
     expect(session.reflection).toBeNull(); // original untouched
   });
 

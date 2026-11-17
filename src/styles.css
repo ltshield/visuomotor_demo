@@ -583,6 +583,114 @@ legend,
   margin: 0;
 }
 
+/* The catch-trial callout: the headline finding, marked with the same orange
+   diamond that marks catch trials in every chart. */
+.callout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  border-left: 5px solid #eb6834;
+  background: #fff9f4;
+}
+
+.callout-mark {
+  flex: 0 0 auto;
+  padding-top: 2px;
+}
+
+.callout-body {
+  min-width: 0;
+}
+
+.callout-headline {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.callout-value {
+  font-size: 1.08rem;
+  margin-bottom: 8px;
+}
+
+.callout-value strong {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.callout-detail {
+  margin-bottom: 8px;
+}
+
+.callout-small {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* "ⓘ" explanations: collapsed by default, one small button per metric. */
+.info-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 10px;
+}
+
+.info-button {
+  font: inherit;
+  font-size: 0.88rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.info-button:hover,
+.info-button[aria-expanded='true'] {
+  background: var(--accent-soft);
+  border-color: #bcd6ee;
+}
+
+.info-button:focus-visible {
+  outline: 3px solid #8fbfe8;
+  outline-offset: 1px;
+}
+
+.info-glyph {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.info-text {
+  margin: 4px 0 8px 8px;
+  padding: 8px 12px;
+  max-width: 720px;
+  border-left: 3px solid #bcd6ee;
+  background: var(--accent-soft);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.93rem;
+}
+
+/* The participant's own answer to the strategy question, inside the debrief. */
+.debrief-answer {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.debrief-answer p:last-child {
+  margin-bottom: 0;
+}
+
 /* One control row for every movement chart; it stays in reach while scrolling. */
 .results-toolbar {
   position: sticky;

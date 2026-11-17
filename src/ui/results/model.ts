@@ -8,7 +8,8 @@
  * same metrics that are written to the downloadable files.
  *
  * Key exports: `phaseBands`, `trialPoints`, `pathPanels`, `catchComparisons`,
- * `normalizedPath`, `resampleByProgress`, and their types.
+ * `catchCallout`, `groupAverages`, `normalizedPath`, `resampleByProgress`,
+ * and their types.
  */
 
 import { alignPath, catchNeighbours, groupTrials, outwardPath } from '../../core/analysis';
@@ -378,6 +379,115 @@ export function catchComparisons(session: SessionRecord, kind: PathKind): CatchC
 }
 
 // ---------------------------------------------------------------------------
+// Catch-trial callout (the headline finding at the top of the page)
+// ---------------------------------------------------------------------------
+
+/**
+ * How far the catch-trial reach went toward cancelling a rotation that was no
+ * longer there:
+ *   full      about the whole rotation
+ *   partial   clearly part of it
+ *   little    close to the participant's ordinary aim
+ *   opposite  shifted the other way
+ */
+export type CatchLevel = 'full' | 'partial' | 'little' | 'opposite';
+
+/** Boundaries between the levels, as a fraction of the rotation being cancelled. */
+export const CATCH_FULL_FROM = 0.75;
+export const CATCH_PARTIAL_FROM = 0.25;
+
+export interface CatchCalloutModel {
+  /** The catch trial the callout reports: the first one with a usable value. */
+  trialNumber: number;
+  /** Initial hand direction error on that trial (deg, + = counterclockwise). */
+  valueDeg: number;
+  /** Earlier catch trials that had no usable value and were passed over. */
+  skippedTrialNumbers: number[];
+  /** Rotation on the rotated reach just before the catch trial: what the hand had been cancelling. Null if none. */
+  rotationDeg: number | null;
+  /** The participant's mean baseline direction, when at least two baseline reaches were valid. */
+  baselineMeanDeg: number | null;
+  /**
+   * The shift from the participant's own baseline aim, as a fraction of what
+   * would cancel the rotation exactly (1 = all of it, 0 = none, negative = the
+   * other way). Null when there was no rotation to compare with.
+   */
+  compensation: number | null;
+  level: CatchLevel | null;
+}
+
+/**
+ * The data behind the catch-trial callout, or null when the session has no
+ * catch trial with a usable value (none scheduled, or all invalid).
+ *
+ * The value shown is the raw initial direction on the catch trial. The LEVEL
+ * is judged against the participant's own baseline aim rather than against 0°,
+ * so that a habitual bias is not mistaken for carried-over compensation.
+ */
+export function catchCallout(session: SessionRecord): CatchCalloutModel | null {
+  const { summary } = session;
+  const index = summary.catchTrials.findIndex((c) => c.valueDeg !== null);
+  if (index < 0) return null;
+  const chosen = summary.catchTrials[index];
+  const valueDeg = chosen.valueDeg as number;
+
+  const byNumber = new Map(finalAttempts(session).map((t) => [t.trialNumber, t]));
+  const before = chosen.neighbourBefore !== null ? byNumber.get(chosen.neighbourBefore) : undefined;
+  const rotationDeg = before ? before.appliedRotationDeg : null;
+  const baselineMeanDeg = summary.baseline.n >= 2 ? summary.baseline.meanDeg : null;
+
+  let compensation: number | null = null;
+  let level: CatchLevel | null = null;
+  if (rotationDeg !== null && rotationDeg !== 0) {
+    // Cancelling a rotation of θ exactly means shifting the hand by −θ.
+    compensation = -(valueDeg - (baselineMeanDeg ?? 0)) / rotationDeg;
+    level =
+      compensation >= CATCH_FULL_FROM
+        ? 'full'
+        : compensation >= CATCH_PARTIAL_FROM
+          ? 'partial'
+          : compensation > -CATCH_PARTIAL_FROM
+            ? 'little'
+            : 'opposite';
+  }
+
+  return {
+    trialNumber: chosen.trialNumber,
+    valueDeg,
+    skippedTrialNumbers: summary.catchTrials.slice(0, index).map((c) => c.trialNumber),
+    rotationDeg,
+    baselineMeanDeg,
+    compensation,
+    level,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Path efficiency and movement time, averaged over a group of trials
+// ---------------------------------------------------------------------------
+
+export interface GroupAverages {
+  /** Mean hand path efficiency over the group's valid reaches (1 = straight); null if none. */
+  pathEfficiency: number | null;
+  /** Mean movement time, onset → arrival, over the group's valid reaches (ms); null if none. */
+  movementTimeMs: number | null;
+}
+
+/** Means of the two secondary metrics over the given trials (final attempts with valid metrics only). */
+export function groupAverages(session: SessionRecord, trialNumbers: readonly number[]): GroupAverages {
+  const wanted = new Set(trialNumbers);
+  const trials = finalAttempts(session).filter((t) => wanted.has(t.trialNumber) && t.valid);
+  const mean = (values: Array<number | null | undefined>): number | null => {
+    const kept = values.filter((v): v is number => typeof v === 'number');
+    return kept.length > 0 ? kept.reduce((a, b) => a + b, 0) / kept.length : null;
+  };
+  return {
+    pathEfficiency: mean(trials.map((t) => t.metrics.hand?.pathEfficiency)),
+    movementTimeMs: mean(trials.map((t) => t.metrics.movementDurationMs)),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Small formatting helpers shared by the results components
 // ---------------------------------------------------------------------------
 
@@ -394,4 +504,11 @@ export function describeDirection(deg: number, digits = 1): string {
   const rounded = Number(Math.abs(deg).toFixed(digits));
   if (rounded === 0) return '0°';
   return `${rounded}° ${deg < 0 ? 'clockwise' : 'counterclockwise'}`;
+}
+
+/** A signed angle with its direction in words: −48.52 → "−48.5° (clockwise)"; 0 → "0°". */
+export function signedWithDirection(deg: number, digits = 1): string {
+  const rounded = Number(deg.toFixed(digits));
+  if (rounded === 0) return '0°';
+  return `${formatSignedDeg(deg, digits)} (${rounded < 0 ? 'clockwise' : 'counterclockwise'})`;
 }

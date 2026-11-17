@@ -11,14 +11,17 @@ import type { TrialSpec } from '../../core/schedule';
 import { scriptedSessionRecord } from '../../core/testUtils';
 import {
   PROGRESS_LEVELS_PCT,
+  catchCallout,
   catchComparisons,
   describeDirection,
   formatDuration,
+  groupAverages,
   initialErrorFor,
   normalizedPath,
   pathPanels,
   phaseBands,
   resampleByProgress,
+  signedWithDirection,
   trialPoints,
   unavailableReason,
 } from './model';
@@ -359,6 +362,116 @@ describe('catchComparisons (lateral deviation against progress)', () => {
   });
 });
 
+describe('catchCallout', () => {
+  /** A session whose catch trials (20 and 28) have the given initial directions; null = no usable value. */
+  function withCatchValues(session: SessionRecord, values: Array<number | null>): SessionRecord {
+    const numbers = session.summary.catchTrials.map((c) => c.trialNumber);
+    return {
+      ...session,
+      summary: {
+        ...session.summary,
+        catchTrials: session.summary.catchTrials.map((c, i) => ({ ...c, valueDeg: values[i] })),
+      },
+      trials: session.trials.map((t) => {
+        const i = numbers.indexOf(t.trialNumber);
+        if (i < 0 || values[i] !== null) return t;
+        return { ...t, valid: false, invalidReason: 'timeout', metrics: { ...t.metrics, valid: false, nullReason: 'timeout' as const, hand: null, cursor: null } };
+      }),
+    };
+  }
+
+  it('reports the FIRST catch trial, with the rotation it followed and the participant’s baseline', () => {
+    const c = catchCallout(sudden)!;
+    expect(c.trialNumber).toBe(20);
+    expect(c.valueDeg).toBeCloseTo(-35, 4);
+    expect(c.skippedTrialNumbers).toEqual([]);
+    expect(c.rotationDeg).toBe(45); // trial 19, the rotated reach just before it
+    expect(c.baselineMeanDeg).toBeCloseTo(3, 4);
+    // Shift from baseline = −38°; cancelling +45° exactly needs −45°.
+    expect(c.compensation).toBeCloseTo(38 / 45, 4);
+    expect(c.level).toBe('full');
+  });
+
+  it('falls back to the second catch trial when the first has no usable value', () => {
+    const c = catchCallout(withCatchValues(sudden, [null, -30]))!;
+    expect(c.trialNumber).toBe(28);
+    expect(c.valueDeg).toBe(-30);
+    expect(c.skippedTrialNumbers).toEqual([20]);
+  });
+
+  it('is omitted when every catch trial is invalid', () => {
+    expect(catchCallout(withCatchValues(sudden, [null, null]))).toBeNull();
+  });
+
+  it('is omitted for a session with no catch trials at all', () => {
+    const none: SessionRecord = { ...sudden, summary: { ...sudden.summary, catchTrials: [] } };
+    expect(catchCallout(none)).toBeNull();
+  });
+
+  it('uses the single catch trial of the Quick Demo', () => {
+    expect(catchCallout(demo)!.trialNumber).toBe(10);
+  });
+
+  it('grades the reach from the data instead of assuming an effect', () => {
+    // Baseline aim is +3°, rotation +45°: the levels are judged on (value − 3) against −45.
+    const level = (value: number) => catchCallout(withCatchValues(sudden, [value, 0]))!.level;
+    expect(level(-48.5)).toBe('full');
+    expect(level(-31)).toBe('full'); // 34/45 = 0.76
+    expect(level(-30)).toBe('partial'); // 33/45 = 0.73
+    expect(level(-9)).toBe('partial'); // 12/45 = 0.27
+    expect(level(-8)).toBe('little'); // 11/45 = 0.24
+    expect(level(3)).toBe('little'); // exactly the baseline aim: no carry-over at all
+    expect(level(12)).toBe('little'); // 9° the other way: within ordinary scatter
+    expect(level(20)).toBe('opposite');
+  });
+
+  it('judges against the participant’s own baseline, so a habitual bias is not read as compensation', () => {
+    // Someone who always aims 14° clockwise, and does so again on the catch trial, has carried nothing over.
+    const biased: SessionRecord = {
+      ...withCatchValues(sudden, [-14, -14]),
+      summary: {
+        ...withCatchValues(sudden, [-14, -14]).summary,
+        baseline: { ...sudden.summary.baseline, meanDeg: -14 },
+      },
+    };
+    const c = catchCallout(biased)!;
+    expect(c.compensation).toBeCloseTo(0, 9);
+    expect(c.level).toBe('little');
+  });
+
+  it('gives no level when there was no rotation to carry over', () => {
+    // In the gradual session the catch trials follow full-size rotation; force a 0° neighbour to check the guard.
+    const flat: SessionRecord = {
+      ...sudden,
+      trials: sudden.trials.map((t) => (t.trialNumber === 19 ? { ...t, appliedRotationDeg: 0 } : t)),
+    };
+    const c = catchCallout(flat)!;
+    expect(c.rotationDeg).toBe(0);
+    expect(c.compensation).toBeNull();
+    expect(c.level).toBeNull();
+  });
+});
+
+describe('groupAverages', () => {
+  it('averages path efficiency and movement time over valid reaches only', () => {
+    const finals = finalAttempts(sudden);
+    const a = groupAverages(sudden, [1, 2, 3]);
+    const expectedEfficiency = (finals[0].metrics.hand!.pathEfficiency + finals[1].metrics.hand!.pathEfficiency + finals[2].metrics.hand!.pathEfficiency) / 3;
+    expect(a.pathEfficiency).toBeCloseTo(expectedEfficiency, 12);
+    expect(a.pathEfficiency).toBeCloseTo(1, 6); // the scripted reaches are straight
+    const expectedTime = (finals[0].metrics.movementDurationMs! + finals[1].metrics.movementDurationMs! + finals[2].metrics.movementDurationMs!) / 3;
+    expect(a.movementTimeMs).toBeCloseTo(expectedTime, 9);
+
+    const withGap = groupAverages(withTimeout(sudden, 2), [1, 2, 3]);
+    expect(withGap.movementTimeMs).toBeCloseTo((finals[0].metrics.movementDurationMs! + finals[2].metrics.movementDurationMs!) / 2, 9);
+  });
+
+  it('is null for an empty group or one with no valid reach', () => {
+    expect(groupAverages(sudden, [])).toEqual({ pathEfficiency: null, movementTimeMs: null });
+    expect(groupAverages(withTimeout(sudden, 5), [5])).toEqual({ pathEfficiency: null, movementTimeMs: null });
+  });
+});
+
 describe('formatting helpers', () => {
   it('formats durations', () => {
     expect(formatDuration(372000)).toBe('6 min 12 s');
@@ -370,5 +483,12 @@ describe('formatting helpers', () => {
     expect(describeDirection(-12.34)).toBe('12.3° clockwise');
     expect(describeDirection(7)).toBe('7° counterclockwise');
     expect(describeDirection(0.01)).toBe('0°');
+  });
+
+  it('writes a signed angle with its direction in plain words', () => {
+    expect(signedWithDirection(-48.52)).toBe('−48.5° (clockwise)');
+    expect(signedWithDirection(12)).toBe('+12° (counterclockwise)');
+    expect(signedWithDirection(0.02)).toBe('0°');
+    expect(signedWithDirection(-0.04)).toBe('0°');
   });
 });

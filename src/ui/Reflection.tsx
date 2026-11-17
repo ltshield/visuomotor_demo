@@ -3,20 +3,27 @@
  * reveal, so answers are not coloured by knowing what happened. Skippable.
  * Answers stay in the browser and are saved inside the session data file.
  *
- * Key export: `Reflection`.
+ * The strategy-awareness question replaces schema 1's "Did you deliberately
+ * change how you aimed?": it asks the same thing with a graded answer.
+ *
+ * Key exports: `Reflection`, `ADJUSTMENT_CHOICES`.
  */
 
 import { useState, type FormEvent } from 'react';
-import type { ReflectionAnswers } from '../core/session';
+import type { ConsciousAdjustment, ReflectionAnswers } from '../core/session';
 
 interface ReflectionProps {
   onDone: (answers: ReflectionAnswers) => void;
 }
 
-const AIM_CHOICES: Array<{ value: NonNullable<ReflectionAnswers['changedAim']>; label: string }> = [
+/** The strategy-awareness question and its answers, shared with the debrief so both show the same words. */
+export const ADJUSTMENT_QUESTION = 'Did you consciously try to adjust where you aimed during the task?';
+
+export const ADJUSTMENT_CHOICES: Array<{ value: ConsciousAdjustment; label: string }> = [
   { value: 'yes', label: 'Yes' },
+  { value: 'somewhat', label: 'Somewhat' },
   { value: 'no', label: 'No' },
-  { value: 'unsure', label: 'Not sure' },
+  { value: 'unsure', label: 'I’m not sure' },
 ];
 
 const DEVICE_CHOICES: Array<{ value: NonNullable<ReflectionAnswers['device']>; label: string }> = [
@@ -27,12 +34,12 @@ const DEVICE_CHOICES: Array<{ value: NonNullable<ReflectionAnswers['device']>; l
 
 export function Reflection({ onDone }: ReflectionProps) {
   const [noticed, setNoticed] = useState('');
-  const [changedAim, setChangedAim] = useState<ReflectionAnswers['changedAim']>(null);
+  const [consciousAdjustment, setConsciousAdjustment] = useState<ConsciousAdjustment | null>(null);
   const [device, setDevice] = useState<ReflectionAnswers['device']>(null);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    onDone({ skipped: false, noticed: noticed.trim(), changedAim, device });
+    onDone({ skipped: false, noticed: noticed.trim(), consciousAdjustment, changedAim: null, device });
   };
 
   return (
@@ -58,15 +65,15 @@ export function Reflection({ onDone }: ReflectionProps) {
         </div>
 
         <fieldset>
-          <legend>Did you deliberately change how you aimed at any point?</legend>
+          <legend>{ADJUSTMENT_QUESTION}</legend>
           <div className="choice-row">
-            {AIM_CHOICES.map((c) => (
+            {ADJUSTMENT_CHOICES.map((c) => (
               <label key={c.value}>
                 <input
                   type="radio"
-                  name="changedAim"
-                  checked={changedAim === c.value}
-                  onChange={() => setChangedAim(c.value)}
+                  name="consciousAdjustment"
+                  checked={consciousAdjustment === c.value}
+                  onChange={() => setConsciousAdjustment(c.value)}
                 />
                 {c.label}
               </label>
@@ -93,7 +100,9 @@ export function Reflection({ onDone }: ReflectionProps) {
           <button
             type="button"
             className="button"
-            onClick={() => onDone({ skipped: true, noticed: '', changedAim: null, device: null })}
+            onClick={() =>
+              onDone({ skipped: true, noticed: '', consciousAdjustment: null, changedAim: null, device: null })
+            }
           >
             Skip
           </button>

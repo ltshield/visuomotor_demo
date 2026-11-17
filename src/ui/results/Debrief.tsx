@@ -13,6 +13,7 @@
 import { perturbedReachCount } from '../../core/presets';
 import type { SessionRecord } from '../../core/record';
 import { catchTrialNumbers, describePerturbation } from '../presetText';
+import { ADJUSTMENT_CHOICES, ADJUSTMENT_QUESTION } from '../Reflection';
 import type { PhaseBand } from './model';
 
 const span = (band: PhaseBand | undefined) => (band ? `trials ${band.firstTrial}–${band.lastTrial}` : '');
@@ -27,6 +28,9 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
   const rotated = perturbedReachCount(preset.structure);
   const repeatRun = session.runNumber > 1;
   const otherKind = preset.perturbation.kind === 'sudden' ? 'gradual' : 'sudden';
+  // The strategy-awareness answer given before the reveal, in the words of the option chosen.
+  const adjustment = session.reflection?.consciousAdjustment ?? null;
+  const adjustmentLabel = ADJUSTMENT_CHOICES.find((c) => c.value === adjustment)?.label ?? null;
 
   return (
     <section className="card debrief">
@@ -77,7 +81,23 @@ export function Debrief({ session, bands }: { session: SessionRecord; bands: Pha
           relationship between hand and cursor, which happens without awareness. A strategy can be dropped as soon as
           you suspect the rotation has gone; implicit recalibration cannot simply be switched off, which is why
           aftereffects are informative. Both can contribute, and this activity cannot cleanly separate them. Your
-          answers to the questions before this page are a clue to which you relied on.
+          answer below is a clue to which you relied on.
+          <div className="debrief-answer" data-testid="strategy-answer">
+            <p>
+              Before seeing these results you were asked: <em>“{ADJUSTMENT_QUESTION}”</em>{' '}
+              {adjustmentLabel ? (
+                <>
+                  You answered: <strong>{adjustmentLabel}</strong>.
+                </>
+              ) : (
+                <>You did not answer this question.</>
+              )}
+            </p>
+            <p>
+              Explicit (conscious) strategies and implicit recalibration can both contribute to adaptation — and both
+              can produce aftereffects.
+            </p>
+          </div>
         </li>
         <li>
           <strong>Washout.</strong> Washout is the gradual return toward baseline once normal feedback is restored.

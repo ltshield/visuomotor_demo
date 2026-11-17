@@ -52,7 +52,8 @@ function buildSession(sessionId = 'export-test'): SessionRecord {
   return buildSessionRecord(plan, taskResultFrom(engine, 2000, driver.t), {
     skipped: false,
     noticed: 'The dot, at times, went "sideways".',
-    changedAim: 'yes',
+    consciousAdjustment: 'somewhat',
+    changedAim: null,
     device: 'mouse',
   });
 }
@@ -84,6 +85,8 @@ describe('session JSON', () => {
     expect(parsed.trials).toHaveLength(session.trials.length);
     expect(parsed.interruptions).toEqual(session.interruptions);
     expect(parsed.reflection).toEqual(session.reflection);
+    expect(parsed.reflection!.consciousAdjustment).toBe('somewhat');
+    expect(parsed.reflection!.changedAim).toBeNull(); // no longer asked; kept in the file as null
     expect(parsed.environment).toEqual(session.environment);
     expect(parsed.conventions).toEqual(session.conventions);
   });

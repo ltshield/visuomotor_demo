@@ -16,6 +16,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { InfoNotes, type MetricInfo } from './InfoNote';
 
 export const VIZ = {
   surface: '#fcfcfb',
@@ -99,17 +100,20 @@ interface ChartCardProps {
   title: string;
   /** One or two sentences on how to read the chart. */
   intro?: ReactNode;
+  /** Collapsed "ⓘ" explanations of the metrics this card shows. */
+  info?: readonly MetricInfo[];
   legend?: LegendItem[];
   children: ReactNode;
   footnote?: ReactNode;
   id?: string;
 }
 
-export function ChartCard({ title, intro, legend, children, footnote, id }: ChartCardProps) {
+export function ChartCard({ title, intro, info, legend, children, footnote, id }: ChartCardProps) {
   return (
     <section className="card viz-card" id={id}>
       <h3>{title}</h3>
       {intro && <p className="viz-intro">{intro}</p>}
+      {info && <InfoNotes items={info} />}
       {legend && legend.length > 0 && <LegendRow items={legend} />}
       {children}
       {footnote && <p className="viz-footnote">{footnote}</p>}

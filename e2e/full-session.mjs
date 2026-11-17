@@ -290,7 +290,8 @@ try {
   const reflectionText = await page.locator('body').innerText();
   check('reflection screen reveals nothing', !REVEALING.test(reflectionText));
   await page.getByLabel(/Did anything seem to change/).fill('The dot started going off to one side.');
-  await page.getByLabel('Yes', { exact: true }).check();
+  check('reflection asks the strategy-awareness question', /Did you consciously try to adjust where you aimed during the task\?/.test(reflectionText));
+  await page.getByLabel('Somewhat', { exact: true }).check();
   await page.getByLabel('Mouse', { exact: true }).check();
   await page.screenshot({ path: path.join(outDir, '05-reflection.png'), fullPage: true });
   await page.getByRole('button', { name: 'Show my results' }).click();
@@ -310,6 +311,20 @@ try {
   check('debrief warns that short sessions may show little', /little or no measurable/i.test(resultsText));
   check('results show no class or population averages', !/class average|population average|other students scored|percentile/i.test(resultsText));
   await page.screenshot({ path: path.join(outDir, '06-results-hand.png'), fullPage: true });
+
+  // Catch-trial callout, metric explanations and the participant's own strategy answer.
+  const calloutText = (await page.getByTestId('catch-callout').count()) > 0 ? await page.getByTestId('catch-callout').innerText() : '';
+  check('the catch-trial callout names the trial and says the rotation was removed', /On trial \d+, the rotation was secretly removed without warning\./.test(calloutText));
+  check('the callout gives the value with its direction in words', /Your hand deviated (0°|[+−]\d+(\.\d)?° \((clockwise|counterclockwise)\))/.test(calloutText), calloutText.split('\n')[1] ?? '');
+  const notes = page.locator('.info-button');
+  check('metric explanations are offered and start collapsed', (await notes.count()) >= 5 && (await page.locator('.info-text').count()) === 0, `${await notes.count()} notes`);
+  await page.getByRole('button', { name: 'Path efficiency' }).click();
+  check('an explanation opens on click', /1\.0 = a perfectly straight line/.test(await page.locator('.info-text').first().innerText()));
+  await page.getByRole('button', { name: 'Path efficiency' }).click();
+  check('and closes again', (await page.locator('.info-text').count()) === 0);
+  const answerText = await page.getByTestId('strategy-answer').innerText();
+  check('the debrief shows the strategy answer and the note', /You answered: Somewhat\./.test(answerText) && /both can produce aftereffects/.test(answerText));
+  await page.getByTestId('catch-callout').screenshot({ path: path.join(outDir, '06b-callout.png') });
 
   // Hover layer and inspection.
   const plot = page.locator('#direction-error-chart .viz-plot');
@@ -364,7 +379,9 @@ try {
   check('one final attempt per scheduled trial', finals.length === session.schedule.length && finals.length === log.length, `${finals.length}`);
   check('the interrupted attempt is kept and flagged', session.trials.some((t) => t.outcome === 'interrupted' && !t.isFinalAttempt && !t.valid));
   check('the interruption is logged', session.interruptions.length === 1 && session.interruptions[0].reason === 'pointer-lock-lost');
-  check('reflection answers are saved', session.reflection && session.reflection.changedAim === 'yes' && session.reflection.device === 'mouse');
+  check('reflection answers are saved', session.reflection && session.reflection.consciousAdjustment === 'somewhat' && session.reflection.changedAim === null && session.reflection.device === 'mouse');
+  const firstCatch = finals.find((t) => t.isCatch);
+  check('the callout value is the first catch trial’s initial hand direction', firstCatch && calloutText.includes(`On trial ${firstCatch.trialNumber},`) && calloutText.includes(`${Math.abs(firstCatch.metrics.hand.initialDirectionErrorDeg).toFixed(1).replace(/\.0$/, '')}°`), firstCatch ? firstCatch.metrics.hand.initialDirectionErrorDeg.toFixed(2) : '');
   check('movement came from pointer events', session.environment.moveEventSource === 'pointermove', `${session.environment.moveSamples} samples from ${session.environment.moveEvents} events`);
   check('all final attempts are valid', finals.every((t) => t.valid), `${finals.filter((t) => t.valid).length} of ${finals.length}`);
   check('every final attempt registered by holding', finals.every((t) => t.outcome === 'completed' && t.holdCompleted === true));

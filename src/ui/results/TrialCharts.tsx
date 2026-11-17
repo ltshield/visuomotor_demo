@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 import { formatDeg, formatSignedDeg } from '../presetText';
 import { AXIS_TICK, ChartCard, SeriesDot, TooltipCard, VIZ, type LegendItem } from './chartTheme';
+import { METRIC_INFO } from './InfoNote';
 import { describeDirection, initialErrorFor, type PathKind, type PhaseBand, type TrialPoint } from './model';
 
 /** Hovering one chart moves the crosshair on the other. */
@@ -297,6 +298,7 @@ export function DirectionErrorChart({ points, bands, kind, onSelectTrial }: Dire
           </>
         )
       }
+      info={points.some((p) => p.isCatch) ? [METRIC_INFO.initialDirection, METRIC_INFO.catchTrial] : [METRIC_INFO.initialDirection]}
       legend={legend}
       footnote={
         invalid.length > 0

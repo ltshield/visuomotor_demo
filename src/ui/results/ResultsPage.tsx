@@ -1,9 +1,10 @@
 /**
  * ResultsPage.tsx — the reveal and the participant's own results.
  *
- * Order of the page: what version you had → what the software did and what
- * you did, trial by trial → your numbers → your movement paths → any single
- * reach → what it means → download your data.
+ * Order of the page: what version you had → your catch trial, the headline
+ * finding → what the software did and what you did, trial by trial → your
+ * numbers → your movement paths → any single reach → what it means → download
+ * your data.
  *
  * The page reads ONLY the SessionRecord (the same object the JSON download
  * contains) and shows ONLY this participant's data: no class averages, no
@@ -21,10 +22,20 @@ import { arrivalRadius } from '../../core/presets';
 import { finalAttempts, type SessionRecord } from '../../core/record';
 import { downloadText } from '../download';
 import { describePerturbation } from '../presetText';
+import { CatchCallout } from './CatchCallout';
 import { CatchComparisonCharts } from './CatchComparisonCharts';
 import { ChartCard } from './chartTheme';
 import { Debrief } from './Debrief';
-import { catchComparisons, formatDuration, pathPanels, phaseBands, trialPoints, type PathKind } from './model';
+import { METRIC_INFO } from './InfoNote';
+import {
+  catchCallout,
+  catchComparisons,
+  formatDuration,
+  pathPanels,
+  phaseBands,
+  trialPoints,
+  type PathKind,
+} from './model';
 import { PathPanels } from './PathPanels';
 import { SummaryTable, TrialTable } from './Tables';
 import { DirectionErrorChart, RotationTimeline } from './TrialCharts';
@@ -62,6 +73,7 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
   const points = useMemo(() => trialPoints(session), [session]);
   const panels = useMemo(() => pathPanels(session, kind), [session, kind]);
   const comparisons = useMemo(() => catchComparisons(session, kind), [session, kind]);
+  const callout = useMemo(() => catchCallout(session), [session]);
 
   const { preset } = session;
   const g = preset.geometry;
@@ -143,6 +155,9 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
         )}
       </section>
 
+      {/* The first catch trial with a usable value; omitted when there is none. */}
+      {callout && <CatchCallout model={callout} />}
+
       <div className="results-toolbar" role="group" aria-label="Which path the movement charts show">
         <span className="results-toolbar-label">Movement charts show:</span>
         <div className="segmented">
@@ -173,6 +188,7 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
       <h2>3. Your movement paths</h2>
       <ChartCard
         title="Paths laid over one another"
+        info={[METRIC_INFO.lateLooksLikeBaseline]}
         intro={
           <>
             Each path is one outward reach, turned so that its target is straight up. All panels use the same axes. A
@@ -196,6 +212,7 @@ export function ResultsPage({ session, otherVersionLabel, onTryOther }: ResultsP
       {comparisons.length > 0 && (
         <ChartCard
           title="Catch trials up close: sideways deviation as the reach unfolds"
+          info={[METRIC_INFO.catchTrial]}
           intro={
             <>
               How far the {kind === 'hand' ? 'hand' : 'cursor'} was to the side of the straight line to the target

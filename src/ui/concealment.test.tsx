@@ -150,7 +150,49 @@ describe('Reflection screen', () => {
     const { container } = render(<Reflection onDone={onDone} />);
     expect(container.textContent).not.toMatch(REVEALING);
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
-    expect(onDone).toHaveBeenCalledWith({ skipped: true, noticed: '', changedAim: null, device: null });
+    expect(onDone).toHaveBeenCalledWith({
+      skipped: true,
+      noticed: '',
+      consciousAdjustment: null,
+      changedAim: null,
+      device: null,
+    });
+  });
+
+  it('asks the strategy-awareness question with its four answers, after the open question', () => {
+    const { container } = render(<Reflection onDone={() => {}} />);
+    const legends = [...container.querySelectorAll('legend')].map((el) => el.textContent);
+    expect(legends[0]).toBe('Did you consciously try to adjust where you aimed during the task?');
+    const group = container.querySelectorAll('fieldset')[0];
+    expect([...group.querySelectorAll('label')].map((el) => el.textContent)).toEqual(['Yes', 'Somewhat', 'No', 'I’m not sure']);
+    // It comes after the free-text box and before the buttons.
+    const order = [...container.querySelectorAll('textarea, fieldset, button')].map((el) => el.tagName);
+    expect(order).toEqual(['TEXTAREA', 'FIELDSET', 'FIELDSET', 'BUTTON', 'BUTTON']);
+    // The near-duplicate question from schema 1 is gone.
+    expect(container.textContent).not.toMatch(/deliberately change how you aimed/i);
+  });
+
+  it('records each answer as its own value', () => {
+    for (const [label, value] of [
+      ['Yes', 'yes'],
+      ['Somewhat', 'somewhat'],
+      ['No', 'no'],
+      ['I’m not sure', 'unsure'],
+    ]) {
+      const onDone = vi.fn();
+      render(<Reflection onDone={onDone} />);
+      fireEvent.click(screen.getByLabelText(label));
+      fireEvent.click(screen.getByRole('button', { name: 'Show my results' }));
+      expect(onDone.mock.calls[0][0].consciousAdjustment).toBe(value);
+      cleanup();
+    }
+  });
+
+  it('leaves the answer null when the question is not answered', () => {
+    const onDone = vi.fn();
+    render(<Reflection onDone={onDone} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show my results' }));
+    expect(onDone.mock.calls[0][0]).toMatchObject({ skipped: false, consciousAdjustment: null, changedAim: null });
   });
 
   it('collects the answers when submitted', () => {
@@ -159,13 +201,14 @@ describe('Reflection screen', () => {
     fireEvent.change(screen.getByLabelText(/Did anything seem to change/), {
       target: { value: '  The dot went sideways.  ' },
     });
-    fireEvent.click(screen.getByLabelText('Not sure'));
+    fireEvent.click(screen.getByLabelText('Somewhat'));
     fireEvent.click(screen.getByLabelText('Mouse'));
     fireEvent.click(screen.getByRole('button', { name: 'Show my results' }));
     expect(onDone).toHaveBeenCalledWith({
       skipped: false,
       noticed: 'The dot went sideways.',
-      changedAim: 'unsure',
+      consciousAdjustment: 'somewhat',
+      changedAim: null,
       device: 'mouse',
     });
   });

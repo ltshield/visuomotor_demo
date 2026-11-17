@@ -10,6 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionRecord } from '../../core/record';
 import type { TrialSpec } from '../../core/schedule';
 import { scriptedSessionRecord } from '../../core/testUtils';
+import { catchInterpretation } from './CatchCallout';
+import { METRIC_INFO } from './InfoNote';
+import { catchCallout } from './model';
 import { ResultsPage } from './ResultsPage';
 
 vi.mock('../download', () => ({ downloadText: vi.fn() }));
@@ -76,6 +79,183 @@ describe('reveal', () => {
     const { text } = renderResults(second);
     expect(text()).toContain('This was run 2 of this visit');
     expect(text()).toContain('the two runs are not a fair comparison of the versions');
+  });
+});
+
+describe('catch trial callout', () => {
+  /** The session with its first catch trial (20) given a chosen initial direction, or no usable value. */
+  function withFirstCatch(session: SessionRecord, value: number | null): SessionRecord {
+    return {
+      ...session,
+      summary: {
+        ...session.summary,
+        catchTrials: session.summary.catchTrials.map((c, i) => (i === 0 ? { ...c, valueDeg: value } : c)),
+      },
+    };
+  }
+
+  it('sits near the top: after the reveal and before the first chart', () => {
+    renderResults(sudden);
+    const callout = screen.getByTestId('catch-callout');
+    const reveal = screen.getByTestId('reveal');
+    const firstChart = document.querySelector('.viz-card') as HTMLElement;
+    expect(reveal.compareDocumentPosition(callout) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(callout.compareDocumentPosition(firstChart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('names the trial and gives the value with its sign and direction in words', () => {
+    renderResults(withFirstCatch(sudden, -48.5));
+    const callout = screen.getByTestId('catch-callout');
+    expect(callout.textContent).toContain('On trial 20, the rotation was secretly removed without warning.');
+    expect(screen.getByTestId('catch-callout-value').textContent).toBe('−48.5° (clockwise)');
+    expect(callout.textContent).toContain('Your hand deviated −48.5° (clockwise) — most or all of the 45° it takes to cancel the rotation.');
+    expect(callout.textContent).toContain('your aiming had recalibrated');
+    // The mechanism is left open: one reach cannot separate strategy from implicit recalibration.
+    expect(callout.textContent).toContain('whether through a deliberate strategy, through recalibration you were not aware of, or both');
+    expect(callout.textContent).toContain('your baseline reaches, before any rotation, averaged +3° (counterclockwise)');
+  });
+
+  it('does not claim recalibration when the reach does not show it', () => {
+    renderResults(withFirstCatch(sudden, 1.2));
+    const text = screen.getByTestId('catch-callout').textContent ?? '';
+    expect(text).toContain('Your hand deviated +1.2° (counterclockwise) — close to where your reaches pointed before any rotation was applied.');
+    expect(text).toContain('showed little sign of still compensating');
+    expect(text).not.toMatch(/had recalibrated|fully/);
+  });
+
+  it('describes a partial shift as partial', () => {
+    renderResults(withFirstCatch(sudden, -20));
+    const text = screen.getByTestId('catch-callout').textContent ?? '';
+    expect(text).toContain('part of the way toward the 45° it takes to cancel the rotation');
+    expect(text).not.toMatch(/most or all|had recalibrated/);
+  });
+
+  it('shows the second catch trial, and says so, when the first has no usable value', () => {
+    renderResults(withFirstCatch(sudden, null));
+    const text = screen.getByTestId('catch-callout').textContent ?? '';
+    expect(text).toContain('On trial 28, the rotation was secretly removed without warning.');
+    expect(text).toContain('The earlier catch trial (trial 20) had no usable value, so this later one is shown instead.');
+  });
+
+  it('is omitted when no catch trial has a usable value', () => {
+    const none: SessionRecord = {
+      ...sudden,
+      summary: { ...sudden.summary, catchTrials: sudden.summary.catchTrials.map((c) => ({ ...c, valueDeg: null })) },
+    };
+    renderResults(none);
+    expect(screen.queryByTestId('catch-callout')).toBeNull();
+  });
+
+  it('has a wording for every level, none of which predicts or guarantees an effect', () => {
+    const base = catchCallout(sudden)!;
+    for (const level of ['full', 'partial', 'little', 'opposite', null] as const) {
+      const { tail, detail } = catchInterpretation({ ...base, level });
+      expect(tail.length).toBeGreaterThan(10);
+      expect(`${tail} ${detail}`).not.toMatch(/you (adapted|learned)|your brain|guarantee|will see/i);
+    }
+  });
+});
+
+describe('metric explanations', () => {
+  const note = (term: string) => screen.getAllByRole('button', { name: term });
+
+  it('offers a collapsed explanation for each metric, where that metric is shown', () => {
+    renderResults(sudden);
+    expect(note('Initial direction error').length).toBe(2); // the per-trial chart and the summary table
+    expect(note('Catch trial error').length).toBe(3); // the callout, the per-trial chart and the catch charts
+    expect(note('Late rotated reaches that look like baseline')).toHaveLength(1);
+    expect(note('Path efficiency')).toHaveLength(1);
+    expect(note('Movement time')).toHaveLength(1);
+    // All collapsed to begin with.
+    for (const button of document.querySelectorAll('.info-button')) {
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    }
+    expect(document.querySelector('.info-text')).toBeNull();
+  });
+
+  it('opens and closes on click', () => {
+    const { text } = renderResults(sudden);
+    const button = note('Path efficiency')[0];
+    expect(text()).not.toContain('1.0 = a perfectly straight line');
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(text()).toContain('1.0 = a perfectly straight line from the start to where the reach arrived');
+    expect(document.getElementById(button.getAttribute('aria-controls')!)?.textContent).toContain('curved path');
+    fireEvent.click(button);
+    expect(text()).not.toContain('1.0 = a perfectly straight line');
+  });
+
+  it('explains each metric in plain language', () => {
+    const { text } = renderResults(sudden);
+    for (const button of document.querySelectorAll('.info-button')) fireEvent.click(button);
+    expect(text()).toContain('measured a quarter of the way to the target, before you had time to course-correct');
+    expect(text()).toContain('Negative = clockwise of the target, positive = counterclockwise');
+    expect(text()).toContain('this does NOT mean you stopped adapting');
+    expect(text()).toContain('your hand error matched what it would take to cancel the rotation');
+    expect(text()).toContain('the rotation was secretly removed for a single reach');
+    expect(text()).toContain('It is not a measure of learning');
+    expect(Object.keys(METRIC_INFO)).toHaveLength(5);
+  });
+
+  it('leaves out the catch-trial note when the session has no catch trials', () => {
+    const none: SessionRecord = {
+      ...sudden,
+      schedule: sudden.schedule.map((t) => ({ ...t, isCatch: false })),
+      trials: sudden.trials.map((t) => ({ ...t, isCatch: false })),
+      summary: { ...sudden.summary, catchTrials: [] },
+    };
+    renderResults(none);
+    expect(screen.queryAllByRole('button', { name: 'Catch trial error' })).toHaveLength(0);
+    expect(note('Initial direction error').length).toBe(2);
+  });
+
+  it('adds path efficiency and movement time to the summary and the per-reach table', () => {
+    renderResults(sudden);
+    const table = document.querySelector('.summary-table') as HTMLElement;
+    const headers = [...table.querySelectorAll('thead th')].map((el) => el.textContent);
+    expect(headers).toContain('Path efficiency (mean)');
+    expect(headers).toContain('Movement time (mean)');
+    const baseline = within(table).getByRole('row', { name: /^Baseline reaches/ }).textContent ?? '';
+    expect(baseline).toContain('1.00'); // the scripted reaches are straight
+    expect(baseline).toMatch(/\d+ ms/);
+    const trialHeaders = [...document.querySelectorAll('.trial-table thead th')].map((el) => el.textContent);
+    expect(trialHeaders).toContain('Hand path efficiency');
+  });
+});
+
+describe('strategy-awareness answer', () => {
+  const answered = (value: 'yes' | 'somewhat' | 'no' | 'unsure' | null, skipped = false): SessionRecord => ({
+    ...sudden,
+    reflection: { skipped, noticed: '', consciousAdjustment: value, changedAim: null, device: null },
+  });
+
+  it('shows the participant’s own answer in the debrief, with the note', () => {
+    for (const [value, label] of [
+      ['yes', 'Yes'],
+      ['somewhat', 'Somewhat'],
+      ['no', 'No'],
+      ['unsure', 'I’m not sure'],
+    ] as const) {
+      const { unmount } = renderResults(answered(value));
+      const box = screen.getByTestId('strategy-answer');
+      expect(document.querySelector('.debrief')?.contains(box)).toBe(true);
+      expect(box.textContent).toContain('“Did you consciously try to adjust where you aimed during the task?”');
+      expect(box.textContent).toContain(`You answered: ${label}.`);
+      expect(box.textContent).toContain(
+        'Explicit (conscious) strategies and implicit recalibration can both contribute to adaptation — and both can produce aftereffects.',
+      );
+      unmount();
+    }
+  });
+
+  it('says so when the question was skipped or left blank, and still shows the note', () => {
+    for (const session of [answered(null), answered(null, true), { ...sudden, reflection: null }]) {
+      const { unmount } = renderResults(session);
+      const box = screen.getByTestId('strategy-answer');
+      expect(box.textContent).toContain('You did not answer this question.');
+      expect(box.textContent).toContain('both can produce aftereffects');
+      unmount();
+    }
   });
 });
 

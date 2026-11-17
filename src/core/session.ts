@@ -93,13 +93,23 @@ export interface PracticeSummary {
   attempts: number;
 }
 
+/** Answer to the strategy-awareness question; null when it was left unanswered or the screen was skipped. */
+export type ConsciousAdjustment = 'yes' | 'somewhat' | 'no' | 'unsure';
+
 /** Optional answers given after the task and before the reveal. */
 export interface ReflectionAnswers {
   /** True when the participant pressed Skip; the other fields are then empty. */
   skipped: boolean;
   /** Free text: what, if anything, seemed to change. */
   noticed: string;
-  /** "Did you deliberately change how you aimed?" */
+  /** "Did you consciously try to adjust where you aimed during the task?" */
+  consciousAdjustment: ConsciousAdjustment | null;
+  /**
+   * @deprecated Schema 1 asked "Did you deliberately change how you aimed?" with
+   * three answers. `consciousAdjustment` replaced that question, so this is
+   * always null in files written by schema 2; it is kept so the shape of
+   * `reflection` did not change.
+   */
   changedAim: 'yes' | 'no' | 'unsure' | null;
   /** Self-reported pointing device. */
   device: 'mouse' | 'trackpad' | 'other' | null;

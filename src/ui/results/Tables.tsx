@@ -14,7 +14,8 @@
 import type { GroupMean } from '../../core/analysis';
 import type { SessionRecord } from '../../core/record';
 import { formatDeg, formatSignedDeg } from '../presetText';
-import type { PhaseBand, TrialPoint } from './model';
+import { InfoNotes, METRIC_INFO } from './InfoNote';
+import { groupAverages, type PhaseBand, type TrialPoint } from './model';
 
 const range = (numbers: number[]): string =>
   numbers.length === 0
@@ -30,6 +31,8 @@ const signed = (value: number | null, digits = 1): string => (value === null ? '
 interface SummaryRow {
   label: string;
   trials: string;
+  /** The trial numbers behind the row, for the secondary averages. */
+  trialNumbers: number[];
   rotation: number | null;
   value: number | null;
   count: string;
@@ -41,6 +44,7 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
   const group = (label: string, g: GroupMean, isBaseline = false): SummaryRow => ({
     label,
     trials: range(g.trialNumbers),
+    trialNumbers: g.trialNumbers,
     rotation: g.meanRotationDeg,
     value: g.meanDeg,
     count: `${g.n} of ${g.trialNumbers.length}`,
@@ -55,6 +59,7 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
       (c, i): SummaryRow => ({
         label: s.catchTrials.length > 1 ? `Catch trial ${i + 1}` : 'Catch trial',
         trials: String(c.trialNumber),
+        trialNumbers: [c.trialNumber],
         rotation: 0,
         value: c.valueDeg,
         count: c.valueDeg !== null ? '1 of 1' : '0 of 1',
@@ -63,6 +68,7 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
     {
       label: 'First aftereffect reach',
       trials: s.firstAftereffect.trialNumber !== null ? String(s.firstAftereffect.trialNumber) : '–',
+      trialNumbers: s.firstAftereffect.trialNumber !== null ? [s.firstAftereffect.trialNumber] : [],
       rotation: 0,
       value: s.firstAftereffect.valueDeg,
       count: s.firstAftereffect.valueDeg !== null ? '1 of 1' : '0 of 1',
@@ -81,24 +87,32 @@ export function SummaryTable({ session }: { session: SessionRecord }) {
             <th className="num">Cursor rotation (mean)</th>
             <th className="num">Initial hand direction (mean)</th>
             <th className="num">Relative to your baseline</th>
+            <th className="num">Path efficiency (mean)</th>
+            <th className="num">Movement time (mean)</th>
             <th className="num">Reaches with a value</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.label}>
-              <th scope="row">{row.label}</th>
-              <td>{row.trials}</td>
-              <td className="num">{row.rotation === null ? '–' : formatSignedDeg(row.rotation, 1)}</td>
-              <td className="num">{signed(row.value)}</td>
-              <td className="num">
-                {row.isBaseline || row.value === null || baseline === null ? '–' : formatSignedDeg(row.value - baseline, 1)}
-              </td>
-              <td className="num">{row.count}</td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const extra = groupAverages(session, row.trialNumbers);
+            return (
+              <tr key={row.label}>
+                <th scope="row">{row.label}</th>
+                <td>{row.trials}</td>
+                <td className="num">{row.rotation === null ? '–' : formatSignedDeg(row.rotation, 1)}</td>
+                <td className="num">{signed(row.value)}</td>
+                <td className="num">
+                  {row.isBaseline || row.value === null || baseline === null ? '–' : formatSignedDeg(row.value - baseline, 1)}
+                </td>
+                <td className="num">{extra.pathEfficiency === null ? '–' : extra.pathEfficiency.toFixed(2)}</td>
+                <td className="num">{extra.movementTimeMs === null ? '–' : `${Math.round(extra.movementTimeMs)} ms`}</td>
+                <td className="num">{row.count}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      <InfoNotes items={[METRIC_INFO.initialDirection, METRIC_INFO.pathEfficiency, METRIC_INFO.movementTime]} />
       <p className="viz-footnote">
         Initial hand direction is measured a quarter of the way to the target; 0° is straight at the target and negative
         is clockwise. These numbers describe your own reaches only. They are not statistical tests, and a mean of four
@@ -131,6 +145,7 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
               <th className="num">Initial hand direction</th>
               <th className="num">Hand direction on arrival</th>
               <th className="num">Initial cursor direction</th>
+              <th className="num">Hand path efficiency</th>
               <th className="num">Reaction time (ms)</th>
               <th className="num">Movement time (ms)</th>
               <th>Note</th>
@@ -149,6 +164,7 @@ export function TrialTable({ points, bands, session }: { points: TrialPoint[]; b
                   <td className="num">{cell(p.handInitialDeg)}</td>
                   <td className="num">{cell(p.handEndpointDeg)}</td>
                   <td className="num">{cell(p.cursorInitialDeg)}</td>
+                  <td className="num">{m?.hand ? m.hand.pathEfficiency.toFixed(3) : ''}</td>
                   <td className="num">{m?.reactionTimeMs != null ? Math.round(m.reactionTimeMs) : ''}</td>
                   <td className="num">{m?.movementDurationMs != null ? Math.round(m.movementDurationMs) : ''}</td>
                   <td>{p.valid ? '' : p.invalidReason === 'timeout' ? 'timed out short of the target' : (p.invalidReason ?? '')}</td>
